@@ -1,0 +1,6 @@
+{
+  "name": "example-bun-api",
+  "scripts": {
+    "start": "bun run server.ts"
+  }
+}
