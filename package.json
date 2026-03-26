@@ -1,6 +1,6 @@
 {
-  "name": "swagger-jack",
-  "description": "Generate full-featured CLIs with workflow automation from any OpenAPI spec",
+  "name": "apijack",
+  "description": "Jack into any OpenAPI spec and rip a full-featured CLI with workflow automation",
   "keywords": ["openapi", "cli-generator", "api-automation", "agentic", "codegen", "swagger", "workflow", "routine"],
   "version": "0.1.0",
   "type": "module",
