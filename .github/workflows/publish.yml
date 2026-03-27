@@ -55,6 +55,7 @@ jobs:
       # Bump version in package.json + create git tag
       - name: Bump version
         run: |
+          git checkout -- .
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           npm version ${{ steps.bump.outputs.level }} -m "chore(release): v%s"
