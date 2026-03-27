@@ -11,7 +11,7 @@ jobs:
     name: "Petstore (OAS 3.0)"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -38,7 +38,7 @@ jobs:
     name: "Edge Cases Stress Test"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -65,7 +65,7 @@ jobs:
     name: "OAS 3.1 Features"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
