@@ -5,6 +5,7 @@ import { homedir } from 'os';
 export interface PluginConfig {
     cliInvocation: string[];
     generatedDir: string;
+    allowedCidrs?: string[];
 }
 
 export function loadPluginConfig(dataDir?: string): PluginConfig | null {
@@ -34,5 +35,6 @@ if (import.meta.main) {
         cliInvocation: config.cliInvocation,
         generatedDir: config.generatedDir,
         routinesDir: join(homedir(), '.apijack', 'routines'),
+        allowedCidrs: config.allowedCidrs,
     });
 }

@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { resolve } from 'path';
-import { existsSync } from 'fs';
+import { resolve, join } from 'path';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { installPlugin } from './install';
 import { uninstallPlugin } from './uninstall';
 import { getPluginPaths } from './paths';
@@ -65,5 +65,83 @@ export function registerPluginCommand(
             const paths = getPluginPaths(version);
             const result = await uninstallPlugin({ claudeDir: paths.claudeDir });
             console.log(result.message);
+        });
+
+    const configCmd = plugin
+        .command('config')
+        .description('Manage plugin configuration');
+
+    configCmd
+        .command('add-cidr <cidr>')
+        .description('Add a CIDR range to the allowed list (e.g., 192.168.1.0/24)')
+        .action((cidr: string) => {
+            const paths = getPluginPaths(version);
+            const configPath = join(paths.userDataDir, 'plugin.json');
+
+            let config: Record<string, unknown> = {};
+            if (existsSync(configPath)) {
+                try {
+                    config = JSON.parse(readFileSync(configPath, 'utf-8'));
+                } catch {}
+            }
+
+            const cidrs: string[] = (config.allowedCidrs as string[]) || [];
+            if (cidrs.includes(cidr)) {
+                console.log(`CIDR ${cidr} is already in the allowlist.`);
+                return;
+            }
+            cidrs.push(cidr);
+            config.allowedCidrs = cidrs;
+            writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+            console.log(`Added ${cidr} to allowed CIDRs.`);
+        });
+
+    configCmd
+        .command('remove-cidr <cidr>')
+        .description('Remove a CIDR range from the allowed list')
+        .action((cidr: string) => {
+            const paths = getPluginPaths(version);
+            const configPath = join(paths.userDataDir, 'plugin.json');
+
+            if (!existsSync(configPath)) {
+                console.error('No plugin config found.');
+                return;
+            }
+
+            let config: Record<string, unknown> = {};
+            try {
+                config = JSON.parse(readFileSync(configPath, 'utf-8'));
+            } catch {}
+
+            const cidrs: string[] = (config.allowedCidrs as string[]) || [];
+            const idx = cidrs.indexOf(cidr);
+            if (idx === -1) {
+                console.log(`CIDR ${cidr} is not in the allowlist.`);
+                return;
+            }
+            cidrs.splice(idx, 1);
+            config.allowedCidrs = cidrs;
+            writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
+            console.log(`Removed ${cidr} from allowed CIDRs.`);
+        });
+
+    configCmd
+        .command('list')
+        .description('Show current plugin configuration')
+        .action(() => {
+            const paths = getPluginPaths(version);
+            const configPath = join(paths.userDataDir, 'plugin.json');
+
+            if (!existsSync(configPath)) {
+                console.log('No plugin config found.');
+                return;
+            }
+
+            try {
+                const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+                console.log(JSON.stringify(config, null, 2));
+            } catch {
+                console.error('Failed to read plugin config.');
+            }
         });
 }

@@ -114,16 +114,21 @@ export function createCli(options: CliOptions): Cli {
             // 3. Register built-in commands
 
             // setup / login
-            const setupAction = async () => {
-                await interactiveSetup(cliName);
+            const setupAction = async (cmdOpts: { allowInsecureStorage?: boolean }) => {
+                await interactiveSetup(cliName, {
+                    allowInsecureStorage: cmdOpts.allowInsecureStorage,
+                    allowedCidrs: options.allowedCidrs,
+                });
             };
             program
                 .command('setup')
                 .description('Interactive setup — configure URL and credentials')
+                .option('--allow-insecure-storage', 'Allow plaintext storage for production URLs')
                 .action(setupAction);
             program
                 .command('login')
                 .description('Alias for setup')
+                .option('--allow-insecure-storage', 'Allow plaintext storage for production URLs')
                 .action(setupAction);
 
             // config
@@ -174,10 +179,11 @@ export function createCli(options: CliOptions): Cli {
                     .description('Import a known site — only provide credentials')
                     .option('--user <email>', 'Email for authentication')
                     .option('--password <password>', 'Password for authentication')
+                    .option('--allow-insecure-storage', 'Allow plaintext storage for production URLs')
                     .action(
                         async (
                             aliasArg: string | undefined,
-                            opts: { user?: string; password?: string },
+                            opts: { user?: string; password?: string; allowInsecureStorage?: boolean },
                         ) => {
                             let alias = aliasArg;
 
@@ -233,12 +239,20 @@ export function createCli(options: CliOptions): Cli {
                                 console.log('Credentials verified.');
                             }
 
-                            await saveEnvironment(cliName, alias, {
-                                url: site.url,
-                                user,
-                                password,
-                            });
-                            console.log(`Saved and switched to '${alias}'.`);
+                            try {
+                                await saveEnvironment(cliName, alias, {
+                                    url: site.url,
+                                    user,
+                                    password,
+                                }, true, {
+                                    allowInsecureStorage: opts.allowInsecureStorage,
+                                    allowedCidrs: options.allowedCidrs,
+                                });
+                                console.log(`Saved and switched to '${alias}'.`);
+                            } catch (err) {
+                                console.error(err instanceof Error ? err.message : String(err));
+                                process.exit(1);
+                            }
                         },
                     );
 
@@ -628,7 +642,10 @@ export function createCli(options: CliOptions): Cli {
     return cli;
 }
 
-async function interactiveSetup(cliName: string): Promise<void> {
+async function interactiveSetup(
+    cliName: string,
+    opts?: { allowInsecureStorage?: boolean; allowedCidrs?: string[] },
+): Promise<void> {
     console.log(`${cliName} Setup\n`);
 
     const envName = await prompt('Environment name [default]: ', 'default');
@@ -652,9 +669,17 @@ async function interactiveSetup(cliName: string): Promise<void> {
         console.log('Credentials verified.');
     }
 
-    await saveEnvironment(cliName, envName, { url, user, password });
-    console.log(`Saved environment '${envName}' to ~/.${cliName}/config.json`);
-    console.log(`Switched to '${envName}'\n`);
+    try {
+        await saveEnvironment(cliName, envName, { url, user, password }, true, {
+            allowInsecureStorage: opts?.allowInsecureStorage,
+            allowedCidrs: opts?.allowedCidrs,
+        });
+        console.log(`Saved environment '${envName}' to ~/.${cliName}/config.json`);
+        console.log(`Switched to '${envName}'\n`);
+    } catch (err) {
+        console.error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+    }
 }
 
 function loadBuiltinRoutines(
