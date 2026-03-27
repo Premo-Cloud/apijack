@@ -41,6 +41,9 @@
   "version": "0.1.0",
   "type": "module",
   "main": "src/index.ts",
+  "bin": {
+    "apijack": "bin/apijack.ts"
+  },
   "scripts": {
     "test": "bun test",
     "lint": "eslint src/",
