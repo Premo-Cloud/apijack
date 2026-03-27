@@ -21,6 +21,7 @@ export interface CliOptions {
     setupHook?: () => Promise<void>;
     builtinRoutinesDir?: string;
     preDispatch?: (command: string, args: Record<string, unknown>, ctx: CliContext) => Promise<void>;
+    allowedCidrs?: string[];
 }
 
 export type CommandRegistrar = (program: Command, ctx: CliContext) => void;

@@ -6,14 +6,31 @@ Jack into any OpenAPI spec and rip a full-featured CLI with AI-agentic workflow 
 [![e2e](https://github.com/Premo-Cloud/apijack/actions/workflows/e2e.yml/badge.svg)](https://github.com/Premo-Cloud/apijack/actions/workflows/e2e.yml)
 [![buy me a coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/garreta)
 
+## Getting Started
 
-## Install
+### Claude Code Plugin (recommended)
+
+Install as a Claude Code plugin — one command, globally available:
+
+```bash
+mycli plugin install
+```
+
+After installing, restart Claude Code. Then ask Claude to set up your API connection:
+
+> "Connect to my API at http://localhost:8080"
+
+Claude will configure credentials, discover endpoints, and you're ready to go. The MCP server exposes all CLI commands as tools — run commands, execute routines, manage environments, and generate code without leaving the conversation.
+
+User data is stored at `~/.apijack/` and survives plugin updates.
+
+### As a Package
+
+For building dedicated CLI products with apijack as a framework:
 
 ```bash
 bun add apijack
 ```
-
-## Quick Start
 
 ```ts
 import { createCli, BasicAuthStrategy } from "apijack";
@@ -40,12 +57,79 @@ mycli --help       # See all generated commands
 ## Features
 
 - **OpenAPI codegen** -- types, client, and Commander commands from any spec
+- **Claude Code plugin** -- one-command setup, MCP server, AI-integrated skills
 - **Pluggable auth strategies** -- Basic, Bearer, API Key, or build your own
+- **Secure credential handling** -- dev URLs stored locally, production APIs require env vars
 - **Multi-environment config** -- switch between dev/staging/prod with `config switch`
 - **YAML routine engine** -- variables, conditions, `forEach`, assertions, sub-routines
 - **Composable dispatcher** -- built-in meta-commands (`wait-until`, session refresh, sub-routines)
 - **`-o routine-step` export** -- run any command with `-o routine-step` to emit YAML you can paste into workflows
-- **Built-in commands** -- `setup`, `config`, `generate`, `routine run/list/validate/test`
+- **Built-in commands** -- `setup`, `config`, `generate`, `routine run/list/validate/test`, `plugin`
+
+## Credential Security
+
+apijack classifies API URLs and restricts credential storage:
+
+**Development** (localhost, .local, .dev, .test, .staging, allowed CIDRs): credentials stored in `~/.{cli}/config.json`.
+
+**Production** (everything else): credentials blocked from plaintext storage. Use environment variables:
+
+```bash
+export MYCLI_URL=https://api.example.com
+export MYCLI_USER=user@example.com
+export MYCLI_PASS=secret
+```
+
+Or pass `--allow-insecure-storage` to override (not recommended).
+
+### Internal Networks
+
+Configure allowed CIDRs for internal networks:
+
+```bash
+mycli plugin config add-cidr 192.168.1.0/24
+mycli plugin config add-cidr 10.0.0.0/8
+```
+
+CLI developers can also set defaults:
+
+```ts
+createCli({
+  // ...
+  allowedCidrs: ["192.168.0.0/16", "10.0.0.0/8"],
+});
+```
+
+## Routines
+
+Routines are YAML-based workflow definitions stored in `~/.{cli}/routines/`. They chain CLI commands with variables, conditionals, loops, assertions, and sub-routines.
+
+```yaml
+name: my-routine
+description: Example workflow
+variables:
+  project_name: "default-value"
+steps:
+  - name: create-resource
+    command: resources create
+    args:
+      --name: "$project_name"
+    output: created
+
+  - name: verify-resource
+    command: resources get
+    args:
+      --id: "$created.id"
+    assert:
+      - path: "$.name"
+        equals: "$project_name"
+```
+
+Discover command signatures for building routines:
+
+```bash
+mycli resources create --name test -o routine-step
+```
 
 ## Auth Strategies
 
@@ -94,9 +178,9 @@ class MyStrategy implements AuthStrategy {
 }
 ```
 
-## Requirements
+## MCP Server
 
-- [Bun](https://bun.sh) runtime
+Run `mycli mcp` to start a Model Context Protocol server outside of the plugin context, exposing all CLI commands as MCP tools for use with AI agents and editors.
 
 ## OpenAPI Spec Compatibility
 
@@ -168,6 +252,10 @@ class MyStrategy implements AuthStrategy {
 | `dependentRequired` / `dependentSchemas` | :x: | |
 | JSON Schema `$id` / `$anchor` | :x: | |
 | `unevaluatedProperties` | :x: | |
+
+## Requirements
+
+- [Bun](https://bun.sh) runtime
 
 ## License
 
