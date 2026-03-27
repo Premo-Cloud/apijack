@@ -211,6 +211,22 @@ export function listRoutines(
     return merged;
 }
 
+export function listRoutinesStructured(
+    routinesDir: string,
+): Array<{ name: string }> {
+    try {
+        const raw = listRoutines(routinesDir);
+        return raw.map((r) => {
+            let clean = r.replace(/\x1b\[[0-9;]*m/g, '');
+            clean = clean.replace(/\s*\(has spec\)\s*$/, '');
+            clean = clean.trim();
+            return { name: clean };
+        });
+    } catch {
+        return [];
+    }
+}
+
 export function formatRoutineList(routines: string[], pathPrefix?: string): string {
     const cleaned = routines
         .map(r => r.replace(/\x1b\[[0-9;]*m/g, '').trim())

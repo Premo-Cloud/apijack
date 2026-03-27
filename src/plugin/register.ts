@@ -58,9 +58,10 @@ export function registerPluginCommand(
                 console.log('1. In Claude Code, run:  /reload-plugins');
                 console.log('2. Then try a prompt like:');
                 console.log('');
-                console.log('   "Use /setup-api to connect apijack to my API at');
-                console.log('    http://localhost:8080, then use /write-routine');
-                console.log('    to automate my workflow."');
+                console.log('   "Use /setup-api to connect apijack to my todo list');
+                console.log('    API at http://localhost:8080, then use /write-routine');
+                console.log('    to automate an e2e test: create 10 todos and then');
+                console.log('    delete them all."');
                 console.log('');
             }
         });

@@ -2,27 +2,57 @@
 
 Jack into any OpenAPI spec and rip a full-featured CLI with AI-agentic workflow automation.
 
+[![npm](https://img.shields.io/npm/v/@apijack/core)](https://www.npmjs.com/package/@apijack/core)
 [![tests](https://github.com/Premo-Cloud/apijack/actions/workflows/ci.yml/badge.svg)](https://github.com/Premo-Cloud/apijack/actions/workflows/ci.yml)
 [![e2e](https://github.com/Premo-Cloud/apijack/actions/workflows/e2e.yml/badge.svg)](https://github.com/Premo-Cloud/apijack/actions/workflows/e2e.yml)
 [![buy me a coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-orange?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/garreta)
 
 ## Getting Started
 
-### Install
-
 ```bash
 bun install -g @apijack/core
 ```
 
-Or run directly without installing:
+### Claude Code Plugin
+
+Install as a Claude Code plugin to let Claude interact with your APIs directly:
 
 ```bash
-bunx @apijack/core setup
+apijack plugin install
 ```
 
-### Quick Start
+Then in Claude Code, run `/reload-plugins`. The plugin exposes 10 MCP tools and 3 skills:
 
-Point apijack at any API:
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `setup` | Configure API credentials for an environment |
+| `generate` | Regenerate CLI from the active environment's OpenAPI spec |
+| `run_command` | Run any CLI command by name with flag arguments |
+| `run_routine` | Execute a named routine workflow |
+| `list_commands` | List available CLI commands (optionally filtered) |
+| `list_routines` | List available routines |
+| `config_list` | List configured environments |
+| `config_switch` | Switch active environment |
+| `get_config` | Get active environment config |
+| `get_spec` | Get summary of generated API types |
+
+### Skills
+
+| Skill | Description |
+|-------|-------------|
+| `/setup-api` | Connect to an API, configure credentials, generate the CLI |
+| `/write-routine` | Author YAML workflow automations that chain CLI commands |
+| `/apijack` | Overview and routing to the above skills |
+
+### Example Prompt
+
+> "Use /setup-api to connect apijack to my todo list API at http://localhost:8080, then use /write-routine to automate an e2e test: create 10 todos and then delete them all."
+
+### Direct CLI Usage
+
+Use apijack directly from the terminal without the plugin:
 
 ```bash
 apijack setup              # Configure URL + credentials (auth auto-detected)
@@ -30,17 +60,7 @@ apijack generate            # Pull OpenAPI spec, generate types/client/commands
 apijack --help              # See all generated commands
 ```
 
-### Claude Code Plugin
-
-Register apijack as a Claude Code plugin for AI-integrated usage:
-
-```bash
-apijack plugin install
-```
-
-After installing, restart Claude Code. Ask Claude to interact with your API directly — the MCP server exposes all commands as tools.
-
-### As a Framework
+## As a Framework
 
 For building dedicated CLI products with apijack as a framework:
 
@@ -249,9 +269,23 @@ class MyStrategy implements AuthStrategy {
 }
 ```
 
-## MCP Server
+## MCP Server (Other Editors)
 
-Run `mycli mcp` to start a Model Context Protocol server outside of the plugin context, exposing all CLI commands as MCP tools for use with AI agents and editors.
+For MCP-compatible editors other than Claude Code (Cursor, Windsurf, etc.), add to your project's `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "apijack": {
+      "type": "stdio",
+      "command": "apijack",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+This exposes the same 10 tools as the Claude Code plugin.
 
 ## OpenAPI Spec Compatibility
 

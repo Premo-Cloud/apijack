@@ -318,9 +318,7 @@ export function createCli(options: CliOptions): Cli {
                 .description(
                     "Regenerate CLI from the active environment's OpenAPI spec",
                 )
-                .option('--skip-agent-docs', 'Skip agent doc generation')
-                .option('--agent-docs <mode>', 'Agent docs mode: append (default) or overwrite', 'append')
-                .action(async (opts: { skipAgentDocs?: boolean; agentDocs?: string }) => {
+                .action(async () => {
                     const env = getActiveEnvConfig(cliName, configOpts);
                     if (!env) {
                         console.error(
@@ -343,36 +341,6 @@ export function createCli(options: CliOptions): Cli {
                             err instanceof Error ? err.message : String(err),
                         );
                         process.exit(1);
-                    }
-
-                    if (!opts.skipAgentDocs) {
-                        try {
-                            const { renderProjectDocs, listRoutinesStructured } = await import('./agent-docs/render');
-
-                            // Read command map from generated files
-                            let commands: Array<{ path: string; operationId: string; description?: string; hasBody: boolean }> = [];
-                            try {
-                                const { commandMap } = await import(resolve(generatedDir, 'command-map'));
-                                commands = Object.entries(commandMap).map(([path, m]: [string, any]) => ({
-                                    path, operationId: m.operationId, description: m.description, hasBody: m.hasBody,
-                                }));
-                            } catch {}
-
-                            // Read routines
-                            const routines = listRoutinesStructured(routinesDir);
-
-                            renderProjectDocs({
-                                cliName: options.name,
-                                description: options.description,
-                                version: options.version,
-                                commands,
-                                routines,
-                            }, { outDir: process.cwd(), mode: (opts.agentDocs as 'append' | 'overwrite') ?? 'append' });
-
-                            console.log('Generated agent docs (CLAUDE.md, AGENTS.md, GEMINI.md, skill, cursor rules)');
-                        } catch (e) {
-                            console.error('Warning: agent doc generation failed:', e instanceof Error ? e.message : e);
-                        }
                     }
                 });
 

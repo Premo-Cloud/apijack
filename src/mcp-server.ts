@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { listRoutinesStructured } from './agent-docs/render';
+import { listRoutinesStructured } from './routine/loader';
 import { getActiveEnvConfig, saveEnvironment } from './config';
 import { classifyUrl } from './url-classifier';
 
@@ -254,7 +254,6 @@ export function createHandlers(opts: McpServerOptions) {
         generate: async (): Promise<ToolResult> => {
             const { stdout, stderr, exitCode } = await runCli(opts.cliInvocation, [
                 'generate',
-                '--skip-agent-docs',
             ]);
             if (exitCode !== 0) {
                 return textResult(

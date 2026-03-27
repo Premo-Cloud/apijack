@@ -74,7 +74,7 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "build:plugin": "bun run scripts/build-plugin.ts",
-    "prepack": "bun run build:plugin && bun run scripts/prepack-agent-docs.ts"
+    "prepack": "bun run build:plugin"
   },
   "dependencies": {
     "cli-table3": "^0.6.5",

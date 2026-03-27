@@ -488,7 +488,7 @@ describe("config_switch handler", () => {
 // ── Handler: generate ───────────────────────────────────────────────
 
 describe("generate handler", () => {
-  test("constructs correct CLI invocation with --skip-agent-docs", async () => {
+  test("constructs correct CLI invocation", async () => {
     const spawnCalls: unknown[][] = [];
     const origSpawn = Bun.spawn;
 
@@ -518,7 +518,6 @@ describe("generate handler", () => {
     expect(spawnCalls[0]).toEqual([
       "/usr/bin/testcli",
       "generate",
-      "--skip-agent-docs",
     ]);
     expect(result.isError).toBeUndefined();
 
