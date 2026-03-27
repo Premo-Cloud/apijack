@@ -18,7 +18,7 @@
 
 | File | Responsibility |
 |------|---------------|
-| `src/agent-docs/render.ts` | Template renderer — renders templates to convention files for all agent targets, handles append mode markers |
+| `src/agent-docs/render.ts` | Template renderer — renders templates to convention files for all agent targets, handles append mode markers. Also exports `listRoutinesStructured(routinesDir)` helper that wraps `listRoutines()`, strips ANSI codes, and returns `Array<{ name: string; description?: string }>` |
 | `src/agent-docs/template.md` | Single-source template for package-level docs (conditionals for Claude/Gemini/generic) |
 | `src/agent-docs/project-template.md` | Template for project-level generated docs (uses ProjectContext) |
 | `src/mcp-server.ts` | MCP server — all tools, shells out to CLI for actions, reads disk for introspection |
@@ -31,7 +31,7 @@
 **Modified files:**
 | File | Changes |
 |------|---------|
-| `src/cli-builder.ts` | Register `mcp` subcommand, add `--no-agent-docs` / `--agent-docs` flags to `generate`, call `renderProjectDocs()` after codegen |
+| `src/cli-builder.ts` | Register `mcp` subcommand (add to CORE_COMMANDS and skipAuthCommands), add `--skip-agent-docs` / `--agent-docs` flags to `generate`, call `renderProjectDocs()` after codegen |
 | `src/index.ts` | Export `renderProjectDocs` and `ProjectContext` type |
 | `package.json` | Add `prepack` script, add `@modelcontextprotocol/sdk` to optionalDependencies |
 
@@ -121,10 +121,11 @@ export function renderProjectDocs(ctx: ProjectContext, opts: RenderOpts): void {
 ```
 
 Key implementation details:
-- Template rendering: simple `{{variable}}` replacement + `{{#if condition}}...{{/if}}` blocks + `{{#each items}}...{{/each}}` loops. No need for a template engine dependency — hand-roll a simple renderer.
-- Append mode: read existing file, find `<!-- apijack:generated:start -->` / `<!-- apijack:generated:end -->` markers, replace content between them. If markers don't exist, append them to end.
-- `renderPackageDocs` reads `template.md` from `import.meta.dir`, renders 3 variants (claude, gemini, generic) + skill file.
-- `renderProjectDocs` reads `project-template.md`, renders with ProjectContext, writes to 5 locations (CLAUDE.md, AGENTS.md, GEMINI.md, .claude/skills/\<name\>/SKILL.md, .cursor/rules/apijack.md).
+- Template rendering: simple `{{variable}}` replacement + `{{#if agent_claude}}...{{/if}}` blocks + `{{#each commands}}...{{/each}}` loops. No template engine dependency — hand-roll a simple renderer. Template variable names: `agent_claude`, `agent_gemini`, `agent_generic` for conditionals; `cliName`, `description`, `version` for values; `commands`, `routines` for iterables.
+- Append mode: read existing file, find `<!-- apijack:generated:start -->` / `<!-- apijack:generated:end -->` markers, replace content between them. If markers don't exist, append them to end of file.
+- `renderPackageDocs` reads `template.md` using `import.meta.dir` (relative to `render.ts`, i.e. `src/agent-docs/`), NOT from the `outDir` parameter. It renders 3 variants (claude, gemini, generic) + skill file to the `outDir`.
+- `renderProjectDocs` reads `project-template.md` (also from `import.meta.dir`), renders with ProjectContext, writes to 5 locations in `opts.outDir` (CLAUDE.md, AGENTS.md, GEMINI.md, .claude/skills/\<name\>/SKILL.md, .cursor/rules/apijack.md).
+- `listRoutinesStructured(routinesDir)`: wraps `listRoutines(routinesDir)` from `../routine/loader`, strips ANSI codes (`/\x1b\[[0-9;]*m/g`), strips "(has spec)" suffix, returns `Array<{ name: string }>`. Description is not available from `listRoutines()` — only names are returned.
 
 - [ ] **Step 5: Run tests — verify pass**
 
@@ -221,17 +222,20 @@ In the `generate` command action (find where `fetchAndGenerate` is called):
 
 1. Add options to the generate command:
    ```ts
-   .option("--no-agent-docs", "Skip agent doc generation")
+   .option("--skip-agent-docs", "Skip agent doc generation")
    .option("--agent-docs <mode>", "Agent docs mode: append (default) or overwrite", "append")
    ```
 
-2. After `fetchAndGenerate()` returns, if `!opts.noAgentDocs`:
-   - Read the generated `command-map.ts` file, parse the `commandMap` export to build `commands` array
-   - Read routines from `~/.<cliName>/routines/` using `listRoutines()` — catch errors (dir may not exist)
+2. After `fetchAndGenerate()` returns, if `!opts.skipAgentDocs`:
+   - Read the generated command-map via dynamic import: `const { commandMap } = await import(resolve(generatedDir, "command-map.ts"))` — this is the same pattern already used in cli-builder.ts for loading generated commands
+   - Transform `Record<string, CommandMapping>` to `Array<{ path, operationId, description, hasBody }>`: `Object.entries(commandMap).map(([path, m]) => ({ path, operationId: m.operationId, description: m.description, hasBody: m.hasBody }))`
+   - Read routines using `listRoutinesStructured(routinesDir)` from `src/agent-docs/render.ts` — returns `[]` if dir doesn't exist (catches errors internally)
    - Build `ProjectContext` with cliName, description, version from `options`
    - Call `renderProjectDocs(ctx, { outDir: process.cwd(), mode: opts.agentDocs })`
 
-3. Log which agent doc files were generated
+3. Add `mcp` to `CORE_COMMANDS` set and `skipAuthCommands` set in cli-builder.ts — MCP servers run headless and should not trigger interactive auth prompts
+
+4. Log which agent doc files were generated
 
 - [ ] **Step 3: Update index.ts exports**
 
@@ -337,11 +341,18 @@ const proc = Bun.spawn([...opts.cliInvocation, ...args], { stdout: "pipe", stder
 const output = await new Response(proc.stdout).text();
 ```
 
+Specific action tool invocations:
+- `run_command`: `[...cli, ...command.split(" "), ...Object.entries(args).flatMap(([k,v]) => [k, String(v)])]`
+- `run_routine`: `[...cli, "routine", "run", name, ...Object.entries(set || {}).flatMap(([k,v]) => ["--set", `${k}=${v}`])]`
+- `generate`: `[...cli, "generate", "--skip-agent-docs"]` (skip agent docs to avoid recursion)
+- `config_switch`: `[...cli, "config", "switch", name]`
+- `config_list`: `[...cli, "config", "list"]`
+
 **Read-only tools** read from disk:
-- `list_commands`: import or parse `opts.generatedDir/command-map.ts`
-- `list_routines`: use `listRoutines(opts.routinesDir)` from `./routine/loader`
-- `get_config`: use `getActiveEnvConfig(opts.cliName)` from `./config` (strip password)
-- `get_spec`: read `opts.generatedDir/types.ts`, count interfaces/types
+- `list_commands`: `await import(resolve(opts.generatedDir, "command-map.ts"))` then transform commandMap entries. Filter by `filter` prefix if provided.
+- `list_routines`: use `listRoutinesStructured(opts.routinesDir)` from `./agent-docs/render`
+- `get_config`: use `getActiveEnvConfig(opts.cliName)` from `./config`, strip `password` field before returning
+- `get_spec`: read `opts.generatedDir/types.ts`, count interfaces/types via regex
 
 - [ ] **Step 4: Run MCP server tests — verify pass**
 
@@ -417,22 +428,41 @@ Expected: CLEAN
 test -f CLAUDE.md && test -f AGENTS.md && test -f GEMINI.md && test -f skills/apijack/SKILL.md && echo "All package docs present"
 ```
 
-- [ ] **Step 4: Test generate with agent docs against example server**
+- [ ] **Step 4: Smoke test agent docs with example server**
 
 ```bash
+# Start example server
 cd /home/gpremo-re/rational/apijack/examples/bun-api && bun run server.ts &
 sleep 2
-cd /tmp/test-project
-mkdir -p /tmp/test-project && cd /tmp/test-project
-# Simulate a consumer project generate
-bun -e "
-  const { generate } = require('/home/gpremo-re/rational/apijack/src/codegen/index.ts');
-  const spec = require('/tmp/spec.json');
-  generate({ spec, outDir: '/tmp/test-project/src/generated' });
-"
-# Fetch spec first
+
+# Fetch spec and generate codegen files
+mkdir -p /tmp/test-project/src/generated
 curl -s -u admin:password http://localhost:3456/v3/api-docs -o /tmp/spec.json
+cd /home/gpremo-re/rational/apijack && bun -e "
+  import { generate } from './src/codegen/index.ts';
+  import spec from '/tmp/spec.json';
+  await generate({ spec, outDir: '/tmp/test-project/src/generated' });
+"
+
+# Verify codegen files exist
+test -f /tmp/test-project/src/generated/command-map.ts && echo "command-map generated"
+
+# Now test renderProjectDocs directly
+bun -e "
+  import { renderProjectDocs, listRoutinesStructured } from './src/agent-docs/render.ts';
+  const { commandMap } = await import('/tmp/test-project/src/generated/command-map.ts');
+  const commands = Object.entries(commandMap).map(([path, m]) => ({ path, operationId: m.operationId, description: m.description, hasBody: m.hasBody }));
+  renderProjectDocs({ cliName: 'taskman', description: 'Task Manager CLI', version: '1.0.0', commands, routines: [] }, { outDir: '/tmp/test-project' });
+"
+
+# Verify agent docs created
+test -f /tmp/test-project/CLAUDE.md && echo "CLAUDE.md generated"
+test -f /tmp/test-project/AGENTS.md && echo "AGENTS.md generated"
+test -f /tmp/test-project/.cursor/rules/apijack.md && echo "Cursor rules generated"
+grep -q "taskman" /tmp/test-project/CLAUDE.md && echo "Contains CLI name"
+
 kill %1
+rm -rf /tmp/test-project /tmp/spec.json
 ```
 
 - [ ] **Step 5: Push**
