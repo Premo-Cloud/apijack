@@ -41,6 +41,8 @@ Static files that ship with `bun add apijack`. Describe the framework genericall
 
 A single template at `src/agent-docs/template.md` with light conditionals (e.g. `{{#if claude}}`) rendered by `src/agent-docs/render.ts`. A `prepack` script generates the files before npm publish. The generated files are committed to git so they're visible in the repo.
 
+The `scripts/` directory is new (does not exist yet). Add a `"prepack": "bun run scripts/prepack-agent-docs.ts"` entry to `package.json` scripts.
+
 ### Claude Code Skill (`skills/apijack/SKILL.md`)
 
 Standard frontmatter format:
@@ -81,9 +83,9 @@ Emitted by `mycli generate` alongside the 4 codegen files. Tailored to the speci
 
 ### Flags on `generate`
 
-- **Default:** generates agent docs alongside codegen files
+- **Default (`append`):** generates agent docs using marker comments, preserving any hand-written content in existing files
 - **`--no-agent-docs`:** skip agent doc generation entirely
-- **`--agent-docs=append`:** only add new commands/routines, never remove or overwrite existing content
+- **`--agent-docs=overwrite`:** fully replace agent doc files (use when you want a clean regeneration)
 
 ### Append mode
 
@@ -106,7 +108,9 @@ interface ProjectContext {
   cliName: string;
   description: string;
   version: string;
-  commands: Array<{ path: string; operationId: string; description?: string }>;
+  /** Built by reading the generated command-map.ts — transform Record<string, CommandMapping> to this array */
+  commands: Array<{ path: string; operationId: string; description?: string; hasBody: boolean }>;
+  /** Built by reading ~/.<cliName>/routines/ via listRoutines() — empty array if dir doesn't exist */
   routines: Array<{ name: string; description?: string }>;
   activeEnv?: { url: string; user: string };
 }
@@ -141,9 +145,9 @@ Built into apijack. Started with `mycli mcp`.
 
 Single file `src/mcp-server.ts` using `@modelcontextprotocol/sdk`.
 
-- Action tools shell out to the CLI binary via `Bun.spawn` or `child_process.execSync`
+- Action tools shell out to the CLI via `Bun.spawn`. The invocation is reconstructed from `process.argv[0]` and `process.argv[1]` (e.g. `bun run src/cli.ts` or the compiled binary path). This works whether the consumer runs via `bun run src/cli.ts` during development or a compiled binary in production.
 - Read-only tools read from disk: command-map file, routines directory, config file
-- The CLI name is determined from the process (the consumer binary invokes `mcp` subcommand)
+- The CLI name is passed to `startMcpServer()` from the `createCli()` options
 
 ### Consumer wiring
 
@@ -176,18 +180,26 @@ Consumer adds to their MCP config (e.g. `.claude/mcp.json`):
 
 ## New Dependencies
 
-- `@modelcontextprotocol/sdk` — MCP server SDK (added to apijack's dependencies)
+- `@modelcontextprotocol/sdk` — MCP server SDK, added as an **`optionalDependency`** (not a hard dependency). The MCP server uses a dynamic `await import("@modelcontextprotocol/sdk")` and catches the import failure gracefully — if the SDK is not installed, the `mcp` subcommand prints a message telling the user to install it. This keeps the core package lean for consumers who don't need MCP.
 
 ## Changes to Existing Code
 
-### `src/codegen/index.ts`
-
-After writing the 4 codegen files, call the agent docs renderer if `--no-agent-docs` is not set. Pass the generated command-map data and routines list as `ProjectContext`.
-
 ### `src/cli-builder.ts`
 
+Agent doc generation happens in `cli-builder.ts` (NOT in `src/codegen/index.ts`), because the CLI context (name, description, version, routines dir) lives here, not in the codegen module. The flow:
+
+1. The `generate` command calls `fetchAndGenerate()` as before (writes 4 codegen files)
+2. After `fetchAndGenerate()` returns, `cli-builder.ts` reads the generated `command-map.ts` to build `ProjectContext.commands`
+3. It reads the routines directory (`~/.<name>/routines/`) to build `ProjectContext.routines` — if the dir doesn't exist or is empty, routines is `[]` (the generated docs omit the routines section)
+4. It calls `renderProjectDocs(projectContext, opts)` from `src/agent-docs/render.ts`
+
+Additional changes:
 - Register the `mcp` subcommand
-- Add `--no-agent-docs` and `--agent-docs=append` flags to the `generate` command
+- Add `--no-agent-docs` and `--agent-docs=append` options to the `generate` command
+
+### Default behavior for existing projects
+
+On first `generate` run, if `CLAUDE.md` / `AGENTS.md` / `GEMINI.md` already exist at the project root, they are **not overwritten** unless the user explicitly passes `--agent-docs=overwrite`. Default behavior is `append` — generated content is placed between marker comments, preserving any existing content. This is safe for projects that already have their own `CLAUDE.md`.
 
 ## New Files
 
