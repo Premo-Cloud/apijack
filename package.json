@@ -45,7 +45,8 @@
     "test": "bun test",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "prepack": "bun run scripts/prepack-agent-docs.ts"
+    "build:plugin": "bun run scripts/build-plugin.ts",
+    "prepack": "bun run build:plugin && bun run scripts/prepack-agent-docs.ts"
   },
   "dependencies": {
     "commander": "^14.0.3",
