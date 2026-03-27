@@ -54,7 +54,14 @@ export function registerPluginCommand(
                 console.log(`\n  Plugin cache:  ${result.pluginCacheDir}`);
                 console.log(`  User data:     ${paths.userDataDir}`);
                 console.log(`  CLI invocation: ${cliInvocation.join(' ')}`);
-                console.log('\nRestart Claude Code to activate the plugin.');
+                console.log('\n── Next steps ──────────────────────────────────────');
+                console.log('1. In Claude Code, run:  /reload-plugins');
+                console.log('2. Then try a prompt like:');
+                console.log('');
+                console.log('   "Use /setup-api to connect apijack to my API at');
+                console.log('    http://localhost:8080, then use /write-routine');
+                console.log('    to automate my workflow."');
+                console.log('');
             }
         });
 
