@@ -7,6 +7,7 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: release
     # Skip if this push was the version bump commit
     if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     permissions:
@@ -66,11 +67,9 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           npm version ${{ steps.bump.outputs.level }} -m "chore(release): v%s"
 
-      # Publish to npm via trusted publishing (OIDC)
+      # Publish to npm via trusted publishing (OIDC — no token needed)
       - name: Publish to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Push version bump commit + tag back to main
       - name: Push version bump
