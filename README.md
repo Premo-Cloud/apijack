@@ -100,55 +100,74 @@ class MyStrategy implements AuthStrategy {
 
 ## OpenAPI Spec Compatibility
 
-### Schema Features
+### OpenAPI 3.0
 
-- [x] Primitive types (`string`, `number`, `integer`, `boolean`)
-- [x] `$ref` resolution
-- [x] `allOf` composition (intersection types)
-- [x] `oneOf` / `anyOf` (union types)
-- [x] Discriminated unions (`discriminator` with `mapping`)
-- [x] `enum` types
-- [x] `nullable` properties
-- [x] `array` types with `items`
-- [x] Nested inline object types (up to depth 3)
-- [x] `additionalProperties` (typed and untyped)
-- [x] `required` field tracking
-- [x] `readOnly` / `writeOnly` properties
-- [x] `default` values
-- [x] `format` hints (`date-time`, `email`, `uri`, `uuid`, `int32`, `int64`, `float`, `double`)
-- [x] Constraint annotations (`minimum`, `maximum`, `minLength`, `maxLength`, `pattern`, `minItems`, `maxItems`, `uniqueItems`)
-- [x] `example` values
-- [x] `deprecated` schemas
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Schemas** | | |
+| Primitive types (`string`, `number`, `integer`, `boolean`) | :white_check_mark: | |
+| `$ref` resolution | :white_check_mark: | Recursive refs handled |
+| `allOf` composition | :white_check_mark: | Intersection types, inline members with JSDoc |
+| `oneOf` / `anyOf` | :white_check_mark: | Union types, inline variant resolution |
+| Discriminated unions (`discriminator` + `mapping`) | :white_check_mark: | Tagged union output |
+| `enum` types | :white_check_mark: | String literal unions |
+| `nullable` | :white_check_mark: | `T \| null` |
+| `array` with `items` | :white_check_mark: | Wraps union/intersection in parens |
+| Nested inline objects | :white_check_mark: | Up to depth 3 |
+| `additionalProperties` | :white_check_mark: | Typed and untyped index signatures |
+| `required` fields | :white_check_mark: | Non-optional properties, `requiredOption` in CLI |
+| `readOnly` / `writeOnly` | :white_check_mark: | readOnly skipped from CLI flags, JSDoc annotated |
+| `default` values | :white_check_mark: | JSDoc `@default` tag |
+| `format` hints | :white_check_mark: | `date-time`, `email`, `uri`, `uuid`, `int32`, `int64`, `float`, `double` |
+| Constraints | :white_check_mark: | `minimum`, `maximum`, `minLength`, `maxLength`, `pattern`, `minItems`, `maxItems`, `uniqueItems` |
+| `example` values | :white_check_mark: | JSDoc `@example` tag |
+| `deprecated` schemas | :white_check_mark: | JSDoc `@deprecated` tag |
+| **Operations** | | |
+| Path parameters | :white_check_mark: | CLI positional args, `@param` JSDoc |
+| Query parameters | :white_check_mark: | With enum, default, format, description |
+| Path-level parameters | :white_check_mark: | Merged with operation-level |
+| Parameter `style` / `explode` | :white_check_mark: | JSDoc annotation |
+| JSON request bodies | :white_check_mark: | Property decomposition to CLI flags |
+| Primitive body types | :white_check_mark: | `string`, `number`, `boolean`, `string[]`, `number[]` |
+| Array request bodies | :white_check_mark: | |
+| `--body` / `--body-file` overrides | :white_check_mark: | Raw JSON escape hatch |
+| Typed response resolution | :white_check_mark: | 200, 201, 202, 204 |
+| Operation `summary` / `description` | :white_check_mark: | CLI descriptions, JSDoc |
+| `deprecated` operations | :white_check_mark: | `[DEPRECATED]` marker, JSDoc |
+| Tag-based command grouping | :white_check_mark: | Normalized (lowercase, split on whitespace/slashes/colons) |
+| Verb deduplication | :white_check_mark: | Falls back to operationId kebab-case |
+| `-o routine-step` YAML export | :white_check_mark: | Build workflows interactively |
+| Variant-specific flags | :white_check_mark: | Hidden by default, `--verbose` to show |
+| **Not Yet Supported** | | |
+| `multipart/form-data` bodies | :x: | Use custom commands |
+| Multiple content types per operation | :x: | |
+| Response headers | :x: | |
+| Cookie parameters | :x: | |
+| OAuth2 / OpenID Connect schemes | :x: | Use custom `AuthStrategy` |
+| Callbacks / Webhooks | :x: | |
+| `links` on responses | :x: | |
+| XML request/response bodies | :x: | |
+| Server variables / templating | :x: | |
 
-### Operation Features
+### OpenAPI 3.1
 
-- [x] Path parameters
-- [x] Query parameters (with enum, default, format)
-- [x] JSON request bodies with property decomposition to CLI flags
-- [x] Primitive body types (`string`, `number`, `boolean`, `string[]`, `number[]`)
-- [x] Array request bodies
-- [x] `--body` / `--body-file` raw overrides
-- [x] Typed response resolution (200, 201, 202, 204)
-- [x] Operation `summary` and `description`
-- [x] `deprecated` operations
-- [x] JSDoc generation on client methods
-- [x] `@param` tags for path, query, and body parameters
-- [x] Tag-based command grouping with normalization
-- [x] Verb deduplication (falls back to operationId kebab-case)
-- [x] `-o routine-step` YAML export
-- [x] Variant-specific flags (hidden, shown with `--verbose`)
-
-### Not Yet Supported
-
-- [ ] `multipart/form-data` request bodies (codegen skips, use custom commands)
-- [ ] Multiple content types per operation
-- [ ] Response headers
-- [ ] Cookie parameters
-- [ ] OAuth2 / OpenID Connect security schemes (use custom `AuthStrategy`)
-- [ ] Callbacks / Webhooks
-- [ ] `links` on responses
-- [ ] XML request/response bodies
-- [ ] Server variables / templating
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Type arrays (`["string", "null"]`) | :white_check_mark: | Emits union type `string \| null` |
+| `const` values | :white_check_mark: | Literal types, `@const` JSDoc |
+| `$defs` (local definitions) | :white_check_mark: | Flattened into schema map |
+| `$ref` siblings (properties alongside `$ref`) | :white_check_mark: | Merged as intersection |
+| `not` (negation) | :white_check_mark: | `Exclude<>` types, `@not` JSDoc |
+| `prefixItems` (tuples) | :white_check_mark: | `[string, number, ...]` tuple types |
+| `patternProperties` | :white_check_mark: | Typed index signatures |
+| Widened `enum` (number, boolean, null values) | :white_check_mark: | Mixed literal unions |
+| `multipleOf` constraint | :white_check_mark: | JSDoc `@multipleOf` tag |
+| `minProperties` / `maxProperties` | :white_check_mark: | JSDoc annotations |
+| `contentMediaType` / `contentEncoding` | :x: | |
+| `if` / `then` / `else` | :x: | |
+| `dependentRequired` / `dependentSchemas` | :x: | |
+| JSON Schema `$id` / `$anchor` | :x: | |
+| `unevaluatedProperties` | :x: | |
 
 ## License
 
