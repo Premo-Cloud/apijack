@@ -2,20 +2,49 @@
   "name": "apijack",
   "description": "Jack into any OpenAPI spec and rip a full-featured CLI with AI-agentic workflow automation",
   "keywords": [
-    "openapi", "swagger", "cli-generator", "codegen", "api-automation",
-    "agentic", "ai-agent", "ai-automation", "workflow", "routine",
-    "claude", "claude-code", "opus", "sonnet", "haiku",
-    "openai", "gpt", "chatgpt", "gemini",
-    "mcp", "model-context-protocol", "tool-use", "function-calling",
-    "copilot", "cursor", "windsurf", "cline", "aider",
-    "langchain", "autogen", "crewai",
-    "cli", "rest-api", "api-client", "sdk-generator"
+    "openapi",
+    "swagger",
+    "cli-generator",
+    "codegen",
+    "api-automation",
+    "agentic",
+    "ai-agent",
+    "ai-automation",
+    "workflow",
+    "routine",
+    "claude",
+    "claude-code",
+    "opus",
+    "sonnet",
+    "haiku",
+    "openai",
+    "gpt",
+    "chatgpt",
+    "gemini",
+    "mcp",
+    "model-context-protocol",
+    "tool-use",
+    "function-calling",
+    "copilot",
+    "cursor",
+    "windsurf",
+    "cline",
+    "aider",
+    "langchain",
+    "autogen",
+    "crewai",
+    "cli",
+    "rest-api",
+    "api-client",
+    "sdk-generator"
   ],
   "version": "0.1.0",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
     "test": "bun test",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
     "prepack": "bun run scripts/prepack-agent-docs.ts"
   },
   "dependencies": {
@@ -24,8 +53,11 @@
     "js-yaml": "^4.1.1"
   },
   "devDependencies": {
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/bun": "latest",
-    "@types/js-yaml": "^4.0.9"
+    "@types/js-yaml": "^4.0.9",
+    "eslint": "^10.1.0",
+    "typescript-eslint": "^8.57.2"
   },
   "peerDependencies": {
     "typescript": "^5"

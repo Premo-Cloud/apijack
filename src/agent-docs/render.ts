@@ -1,146 +1,146 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
-import { join, dirname } from "path";
-import { listRoutines } from "../routine/loader";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { listRoutines } from '../routine/loader';
 
 export interface ProjectContext {
-  cliName: string;
-  description: string;
-  version: string;
-  commands: Array<{ path: string; operationId: string; description?: string; hasBody: boolean }>;
-  routines: Array<{ name: string; description?: string }>;
-  activeEnv?: { url: string; user: string };
+    cliName: string;
+    description: string;
+    version: string;
+    commands: Array<{ path: string; operationId: string; description?: string; hasBody: boolean }>;
+    routines: Array<{ name: string; description?: string }>;
+    activeEnv?: { url: string; user: string };
 }
 
 interface RenderOpts {
-  outDir: string;
-  mode?: "append" | "overwrite"; // default: "append"
+    outDir: string;
+    mode?: 'append' | 'overwrite'; // default: "append"
 }
 
-const START_MARKER = "<!-- apijack:generated:start -->";
-const END_MARKER = "<!-- apijack:generated:end -->";
+const START_MARKER = '<!-- apijack:generated:start -->';
+const END_MARKER = '<!-- apijack:generated:end -->';
 
 // ─── Template engine ────────────────────────────────────────────────
 
 function renderTemplate(
-  template: string,
-  vars: Record<string, unknown>,
+    template: string,
+    vars: Record<string, unknown>,
 ): string {
-  let result = template;
+    let result = template;
 
-  // 1. Process {{#each collection}}...{{/each}} blocks
-  result = processEachBlocks(result, vars);
+    // 1. Process {{#each collection}}...{{/each}} blocks
+    result = processEachBlocks(result, vars);
 
-  // 2. Process {{#if variable}}...{{/if}} blocks (may be nested)
-  result = processConditionalBlocks(result, vars, "if");
+    // 2. Process {{#if variable}}...{{/if}} blocks (may be nested)
+    result = processConditionalBlocks(result, vars, 'if');
 
-  // 3. Process {{#unless variable}}...{{/unless}} blocks
-  result = processConditionalBlocks(result, vars, "unless");
+    // 3. Process {{#unless variable}}...{{/unless}} blocks
+    result = processConditionalBlocks(result, vars, 'unless');
 
-  // 4. Simple variable replacement {{variable}}
-  result = result.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
-    const val = vars[key];
-    if (val === undefined || val === null) return "";
-    return String(val);
-  });
+    // 4. Simple variable replacement {{variable}}
+    result = result.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => {
+        const val = vars[key];
+        if (val === undefined || val === null) return '';
+        return String(val);
+    });
 
-  return result;
+    return result;
 }
 
 function processEachBlocks(
-  template: string,
-  vars: Record<string, unknown>,
+    template: string,
+    vars: Record<string, unknown>,
 ): string {
-  const regex = /\{\{#each\s+(\w+)\}\}\n?([\s\S]*?)\{\{\/each\}\}\n?/g;
-  return template.replace(regex, (_match, key: string, body: string) => {
-    const arr = vars[key];
-    if (!Array.isArray(arr) || arr.length === 0) return "";
+    const regex = /\{\{#each\s+(\w+)\}\}\n?([\s\S]*?)\{\{\/each\}\}\n?/g;
+    return template.replace(regex, (_match, key: string, body: string) => {
+        const arr = vars[key];
+        if (!Array.isArray(arr) || arr.length === 0) return '';
 
-    return arr
-      .map((item: Record<string, unknown>) => {
-        let rendered = body;
+        return arr
+            .map((item: Record<string, unknown>) => {
+                let rendered = body;
 
-        // Process inner {{#if field}}...{{/if}} blocks scoped to the item
-        rendered = processConditionalBlocks(rendered, item, "if");
-        rendered = processConditionalBlocks(rendered, item, "unless");
+                // Process inner {{#if field}}...{{/if}} blocks scoped to the item
+                rendered = processConditionalBlocks(rendered, item, 'if');
+                rendered = processConditionalBlocks(rendered, item, 'unless');
 
-        // Replace item field references
-        rendered = rendered.replace(/\{\{(\w+)\}\}/g, (_m, field: string) => {
-          const val = item[field];
-          if (val === undefined || val === null) return "";
-          return String(val);
-        });
-        return rendered;
-      })
-      .join("");
-  });
+                // Replace item field references
+                rendered = rendered.replace(/\{\{(\w+)\}\}/g, (_m, field: string) => {
+                    const val = item[field];
+                    if (val === undefined || val === null) return '';
+                    return String(val);
+                });
+                return rendered;
+            })
+            .join('');
+    });
 }
 
 function processConditionalBlocks(
-  template: string,
-  vars: Record<string, unknown>,
-  type: "if" | "unless",
+    template: string,
+    vars: Record<string, unknown>,
+    type: 'if' | 'unless',
 ): string {
-  // Process from innermost to outermost to handle nesting
-  // Use a non-greedy match with no nesting of the same type
-  const regex = new RegExp(
-    `\\{\\{#${type}\\s+(\\w+)\\}\\}\\n?([\\s\\S]*?)\\{\\{\\/${type}\\}\\}\\n?`,
-    "g",
-  );
+    // Process from innermost to outermost to handle nesting
+    // Use a non-greedy match with no nesting of the same type
+    const regex = new RegExp(
+        `\\{\\{#${type}\\s+(\\w+)\\}\\}\\n?([\\s\\S]*?)\\{\\{\\/${type}\\}\\}\\n?`,
+        'g',
+    );
 
-  let prev = "";
-  let result = template;
+    let prev = '';
+    let result = template;
 
-  // Iterate until stable (handles nested blocks)
-  while (result !== prev) {
-    prev = result;
-    result = result.replace(regex, (_match, key: string, body: string) => {
-      const val = vars[key];
-      const truthy = val !== undefined && val !== null && val !== false && val !== "" && val !== 0;
-      if (type === "if") {
-        return truthy ? body : "";
-      } else {
-        return truthy ? "" : body;
-      }
-    });
-  }
+    // Iterate until stable (handles nested blocks)
+    while (result !== prev) {
+        prev = result;
+        result = result.replace(regex, (_match, key: string, body: string) => {
+            const val = vars[key];
+            const truthy = val !== undefined && val !== null && val !== false && val !== '' && val !== 0;
+            if (type === 'if') {
+                return truthy ? body : '';
+            } else {
+                return truthy ? '' : body;
+            }
+        });
+    }
 
-  return result;
+    return result;
 }
 
 // ─── File writing with append/overwrite modes ───────────────────────
 
-function writeWithMode(filePath: string, content: string, mode: "append" | "overwrite"): void {
-  const dir = dirname(filePath);
-  mkdirSync(dir, { recursive: true });
+function writeWithMode(filePath: string, content: string, mode: 'append' | 'overwrite'): void {
+    const dir = dirname(filePath);
+    mkdirSync(dir, { recursive: true });
 
-  if (mode === "overwrite" || !existsSync(filePath)) {
-    writeFileSync(filePath, content, "utf-8");
-    return;
-  }
+    if (mode === 'overwrite' || !existsSync(filePath)) {
+        writeFileSync(filePath, content, 'utf-8');
+        return;
+    }
 
-  // Append mode with marker management
-  const existing = readFileSync(filePath, "utf-8");
-  const startIdx = existing.indexOf(START_MARKER);
-  const endIdx = existing.indexOf(END_MARKER);
+    // Append mode with marker management
+    const existing = readFileSync(filePath, 'utf-8');
+    const startIdx = existing.indexOf(START_MARKER);
+    const endIdx = existing.indexOf(END_MARKER);
 
-  const wrapped = `${START_MARKER}\n${content}\n${END_MARKER}\n`;
+    const wrapped = `${START_MARKER}\n${content}\n${END_MARKER}\n`;
 
-  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
     // Replace content between markers
-    const before = existing.slice(0, startIdx);
-    const after = existing.slice(endIdx + END_MARKER.length);
-    writeFileSync(filePath, before + wrapped + after, "utf-8");
-  } else {
+        const before = existing.slice(0, startIdx);
+        const after = existing.slice(endIdx + END_MARKER.length);
+        writeFileSync(filePath, before + wrapped + after, 'utf-8');
+    } else {
     // No markers found -- append with markers
-    const separator = existing.endsWith("\n") ? "\n" : "\n\n";
-    writeFileSync(filePath, existing + separator + wrapped, "utf-8");
-  }
+        const separator = existing.endsWith('\n') ? '\n' : '\n\n';
+        writeFileSync(filePath, existing + separator + wrapped, 'utf-8');
+    }
 }
 
 // ─── Skill file generation ──────────────────────────────────────────
 
 function generateSkillContent(name: string, body: string): string {
-  return `---
+    return `---
 name: ${name}
 description: CLI tool generated by apijack from an OpenAPI spec
 triggers:
@@ -156,94 +156,94 @@ ${body}`;
 // ─── Public API ─────────────────────────────────────────────────────
 
 export function renderPackageDocs(outDir: string): void {
-  const templatePath = join(import.meta.dir, "template.md");
-  const template = readFileSync(templatePath, "utf-8");
+    const templatePath = join(import.meta.dir, 'template.md');
+    const template = readFileSync(templatePath, 'utf-8');
 
-  const variants: Array<{ file: string; vars: Record<string, boolean> }> = [
-    { file: "CLAUDE.md", vars: { agent_claude: true, agent_gemini: false, agent_generic: false } },
-    { file: "AGENTS.md", vars: { agent_claude: false, agent_gemini: false, agent_generic: true } },
-    { file: "GEMINI.md", vars: { agent_claude: false, agent_gemini: true, agent_generic: false } },
-  ];
+    const variants: Array<{ file: string; vars: Record<string, boolean> }> = [
+        { file: 'CLAUDE.md', vars: { agent_claude: true, agent_gemini: false, agent_generic: false } },
+        { file: 'AGENTS.md', vars: { agent_claude: false, agent_gemini: false, agent_generic: true } },
+        { file: 'GEMINI.md', vars: { agent_claude: false, agent_gemini: true, agent_generic: false } },
+    ];
 
-  mkdirSync(outDir, { recursive: true });
+    mkdirSync(outDir, { recursive: true });
 
-  for (const { file, vars } of variants) {
-    const rendered = renderTemplate(template, vars);
-    writeFileSync(join(outDir, file), rendered, "utf-8");
-  }
+    for (const { file, vars } of variants) {
+        const rendered = renderTemplate(template, vars);
+        writeFileSync(join(outDir, file), rendered, 'utf-8');
+    }
 
-  // Skill file
-  const skillBody = renderTemplate(template, {
-    agent_claude: true,
-    agent_gemini: false,
-    agent_generic: false,
-  });
-  const skillContent = generateSkillContent("apijack", skillBody);
-  const skillDir = join(outDir, "skills", "apijack");
-  mkdirSync(skillDir, { recursive: true });
-  writeFileSync(join(skillDir, "SKILL.md"), skillContent, "utf-8");
+    // Skill file
+    const skillBody = renderTemplate(template, {
+        agent_claude: true,
+        agent_gemini: false,
+        agent_generic: false,
+    });
+    const skillContent = generateSkillContent('apijack', skillBody);
+    const skillDir = join(outDir, 'skills', 'apijack');
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, 'SKILL.md'), skillContent, 'utf-8');
 }
 
 export function renderProjectDocs(ctx: ProjectContext, opts: RenderOpts): void {
-  const templatePath = join(import.meta.dir, "project-template.md");
-  const template = readFileSync(templatePath, "utf-8");
-  const mode = opts.mode ?? "append";
+    const templatePath = join(import.meta.dir, 'project-template.md');
+    const template = readFileSync(templatePath, 'utf-8');
+    const mode = opts.mode ?? 'append';
 
-  const baseVars: Record<string, unknown> = {
-    cliName: ctx.cliName,
-    description: ctx.description,
-    version: ctx.version,
-    commands: ctx.commands,
-    routines: ctx.routines,
-  };
+    const baseVars: Record<string, unknown> = {
+        cliName: ctx.cliName,
+        description: ctx.description,
+        version: ctx.version,
+        commands: ctx.commands,
+        routines: ctx.routines,
+    };
 
-  const variants: Array<{ file: string; vars: Record<string, boolean> }> = [
-    { file: "CLAUDE.md", vars: { agent_claude: true, agent_gemini: false, agent_generic: false } },
-    { file: "AGENTS.md", vars: { agent_claude: false, agent_gemini: false, agent_generic: true } },
-    { file: "GEMINI.md", vars: { agent_claude: false, agent_gemini: true, agent_generic: false } },
-  ];
+    const variants: Array<{ file: string; vars: Record<string, boolean> }> = [
+        { file: 'CLAUDE.md', vars: { agent_claude: true, agent_gemini: false, agent_generic: false } },
+        { file: 'AGENTS.md', vars: { agent_claude: false, agent_gemini: false, agent_generic: true } },
+        { file: 'GEMINI.md', vars: { agent_claude: false, agent_gemini: true, agent_generic: false } },
+    ];
 
-  for (const { file, vars } of variants) {
-    const rendered = renderTemplate(template, { ...baseVars, ...vars });
-    writeWithMode(join(opts.outDir, file), rendered, mode);
-  }
+    for (const { file, vars } of variants) {
+        const rendered = renderTemplate(template, { ...baseVars, ...vars });
+        writeWithMode(join(opts.outDir, file), rendered, mode);
+    }
 
-  // Cursor rules
-  const cursorContent = renderTemplate(template, {
-    ...baseVars,
-    agent_generic: true,
-    agent_claude: false,
-    agent_gemini: false,
-  });
-  const cursorDir = join(opts.outDir, ".cursor", "rules");
-  mkdirSync(cursorDir, { recursive: true });
-  writeFileSync(join(cursorDir, "apijack.md"), cursorContent, "utf-8");
+    // Cursor rules
+    const cursorContent = renderTemplate(template, {
+        ...baseVars,
+        agent_generic: true,
+        agent_claude: false,
+        agent_gemini: false,
+    });
+    const cursorDir = join(opts.outDir, '.cursor', 'rules');
+    mkdirSync(cursorDir, { recursive: true });
+    writeFileSync(join(cursorDir, 'apijack.md'), cursorContent, 'utf-8');
 
-  // Project skill
-  const skillBody = renderTemplate(template, {
-    ...baseVars,
-    agent_claude: true,
-    agent_gemini: false,
-    agent_generic: false,
-  });
-  const skillContent = generateSkillContent(ctx.cliName, skillBody);
-  const skillDir = join(opts.outDir, ".claude", "skills", ctx.cliName);
-  mkdirSync(skillDir, { recursive: true });
-  writeFileSync(join(skillDir, "SKILL.md"), skillContent, "utf-8");
+    // Project skill
+    const skillBody = renderTemplate(template, {
+        ...baseVars,
+        agent_claude: true,
+        agent_gemini: false,
+        agent_generic: false,
+    });
+    const skillContent = generateSkillContent(ctx.cliName, skillBody);
+    const skillDir = join(opts.outDir, '.claude', 'skills', ctx.cliName);
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, 'SKILL.md'), skillContent, 'utf-8');
 }
 
 export function listRoutinesStructured(
-  routinesDir: string,
+    routinesDir: string,
 ): Array<{ name: string }> {
-  try {
-    const raw = listRoutines(routinesDir);
-    return raw.map((r) => {
-      let clean = r.replace(/\x1b\[[0-9;]*m/g, "");
-      clean = clean.replace(/\s*\(has spec\)\s*$/, "");
-      clean = clean.trim();
-      return { name: clean };
-    });
-  } catch {
-    return [];
-  }
+    try {
+        const raw = listRoutines(routinesDir);
+        return raw.map((r) => {
+            let clean = r.replace(/\x1b\[[0-9;]*m/g, '');
+            clean = clean.replace(/\s*\(has spec\)\s*$/, '');
+            clean = clean.trim();
+            return { name: clean };
+        });
+    } catch {
+        return [];
+    }
 }
