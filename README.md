@@ -8,23 +8,39 @@ Jack into any OpenAPI spec and rip a full-featured CLI with AI-agentic workflow 
 
 ## Getting Started
 
-### Claude Code Plugin (recommended)
-
-Install as a Claude Code plugin — one command, globally available:
+### Install
 
 ```bash
-mycli plugin install
+bun install -g apijack
 ```
 
-After installing, restart Claude Code. Then ask Claude to set up your API connection:
+Or run directly without installing:
 
-> "Connect to my API at http://localhost:8080"
+```bash
+bunx apijack setup
+```
 
-Claude will configure credentials, discover endpoints, and you're ready to go. The MCP server exposes all CLI commands as tools — run commands, execute routines, manage environments, and generate code without leaving the conversation.
+### Quick Start
 
-User data is stored at `~/.apijack/` and survives plugin updates.
+Point apijack at any API:
 
-### As a Package
+```bash
+apijack setup              # Configure URL + credentials (auth auto-detected)
+apijack generate            # Pull OpenAPI spec, generate types/client/commands
+apijack --help              # See all generated commands
+```
+
+### Claude Code Plugin
+
+Register apijack as a Claude Code plugin for AI-integrated usage:
+
+```bash
+apijack plugin install
+```
+
+After installing, restart Claude Code. Ask Claude to interact with your API directly — the MCP server exposes all commands as tools.
+
+### As a Framework
 
 For building dedicated CLI products with apijack as a framework:
 
@@ -87,8 +103,8 @@ Or pass `--allow-insecure-storage` to override (not recommended).
 Configure allowed CIDRs for internal networks:
 
 ```bash
-mycli plugin config add-cidr 192.168.1.0/24
-mycli plugin config add-cidr 10.0.0.0/8
+apijack plugin config add-cidr 192.168.1.0/24
+apijack plugin config add-cidr 10.0.0.0/8
 ```
 
 CLI developers can also set defaults:
@@ -99,6 +115,61 @@ createCli({
   allowedCidrs: ["192.168.0.0/16", "10.0.0.0/8"],
 });
 ```
+
+## Project Mode
+
+Drop an `.apijack.json` in your project root to make apijack project-aware:
+
+```json
+{
+  "name": "my-api",
+  "specUrl": "http://localhost:8080/v3/api-docs",
+  "generatedDir": "./src/generated"
+}
+```
+
+With a project file, apijack:
+- Reads defaults from `.apijack.json` (committed to git)
+- Stores credentials in `.apijack/config.json` (add `.apijack/` to `.gitignore`)
+- Generates files to your project's configured directory
+- Loads routines from `./routines/` in addition to global ones
+
+### Project Extensions
+
+Extend apijack with project-local code in `.apijack/`:
+
+```
+.apijack/
+├── config.json          # credentials (gitignored)
+├── auth.ts              # custom auth strategy (export default)
+├── commands/            # custom commands (each file exports a registrar)
+│   └── deploy.ts
+└── dispatchers/         # custom dispatchers (each file exports a handler)
+    └── notify.ts
+```
+
+**Custom auth** (`.apijack/auth.ts`):
+```ts
+export default {
+  async authenticate(config) {
+    const token = await fetchToken(config);
+    return { headers: { Authorization: `Bearer ${token}` } };
+  },
+  async restore(cached) { return cached; },
+};
+```
+
+**Custom command** (`.apijack/commands/deploy.ts`):
+```ts
+export const name = 'deploy';
+export default function register(program, ctx) {
+  program.command('deploy')
+    .description('Deploy the current environment')
+    .action(async () => { /* ... */ });
+}
+```
+
+Without a project file, apijack runs in global mode using `~/.apijack/`.
 
 ## Routines
 
