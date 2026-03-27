@@ -86,7 +86,7 @@ mycli --help       # See all generated commands
 
 apijack classifies API URLs and restricts credential storage:
 
-**Development** (localhost, .local, .dev, .test, .staging, allowed CIDRs): credentials stored in `~/.{cli}/config.json`.
+**Development** (localhost, .local, .test, .staging, allowed CIDRs): credentials stored in `~/.{cli}/config.json`.
 
 **Production** (everything else): credentials blocked from plaintext storage. Use environment variables:
 

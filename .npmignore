@@ -1,0 +1,11 @@
+.npmrc
+tests/
+docs/
+examples/
+.github/
+.gitignore
+.npmignore
+bun.lockb
+eslint.config.ts
+tsconfig.json
+scripts/

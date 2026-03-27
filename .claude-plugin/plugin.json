@@ -5,7 +5,7 @@
   "author": {
     "name": "Garret"
   },
-  "repository": "https://github.com/garrettmichaelgeorge/apijack",
+  "repository": "https://github.com/Premo-Cloud/apijack",
   "license": "MIT",
   "keywords": ["openapi", "cli", "mcp", "api", "routines"]
 }

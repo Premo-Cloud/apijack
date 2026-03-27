@@ -74,7 +74,9 @@ export async function installPlugin(opts: InstallOptions): Promise<InstallResult
     if (existsSync(installedPath)) {
         try {
             installed = JSON.parse(readFileSync(installedPath, 'utf-8'));
-        } catch {}
+        } catch {
+            console.warn('Warning: could not parse installed_plugins.json, creating fresh');
+        }
     }
 
     const now = new Date().toISOString();
@@ -95,7 +97,9 @@ export async function installPlugin(opts: InstallOptions): Promise<InstallResult
     if (existsSync(settingsPath)) {
         try {
             settings = JSON.parse(readFileSync(settingsPath, 'utf-8'));
-        } catch {}
+        } catch {
+            console.warn('Warning: could not parse settings.json, creating fresh');
+        }
     }
 
     if (!settings.enabledPlugins) settings.enabledPlugins = {};

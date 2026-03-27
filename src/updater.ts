@@ -39,6 +39,7 @@ export async function checkForUpdate(
     currentVersion: string,
     dataDir: string,
 ): Promise<void> {
+    if (process.env.APIJACK_SKIP_UPDATE) return;
     if (!shouldCheckForUpdate(dataDir)) return;
     if (!process.stdin.isTTY) return;
 
@@ -71,6 +72,7 @@ export async function checkForUpdate(
                     stdout: 'inherit',
                     stderr: 'inherit',
                     stdin: 'inherit',
+                    env: { ...process.env, APIJACK_SKIP_UPDATE: '1' },
                 });
                 process.exit(await reProc.exited);
             } else {

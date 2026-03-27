@@ -37,7 +37,7 @@ jobs:
         run: |
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$LAST_TAG" ]; then
-            RANGE="HEAD"
+            RANGE=$(git rev-list --max-parents=0 HEAD)..HEAD
           else
             RANGE="${LAST_TAG}..HEAD"
           fi

@@ -19,8 +19,8 @@ describe('classifyUrl()', () => {
             expect(classifyUrl('http://myserver.local:8080').safe).toBe(true);
         });
 
-        test('.dev hostname is safe', () => {
-            expect(classifyUrl('http://api.dev:3000').safe).toBe(true);
+        test('.dev hostname is production (real TLD)', () => {
+            expect(classifyUrl('http://api.dev:3000').safe).toBe(false);
         });
 
         test('.test hostname is safe', () => {

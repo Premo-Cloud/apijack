@@ -12,8 +12,9 @@ import { findProjectConfig, loadProjectConfig, resolveConfigDir } from '../src/p
 import { loadProjectAuth, loadProjectCommands, loadProjectDispatchers } from '../src/project-loader';
 import { checkForUpdate } from '../src/updater';
 import { getActiveEnvConfig } from '../src/config';
+import pkg from '../package.json';
 
-const VERSION = '0.1.0';
+const VERSION = pkg.version;
 const CLI_NAME = 'apijack';
 
 // 1. Ensure global data dir exists
@@ -42,9 +43,14 @@ if (projectConfig?.generatedDir && projectRoot) {
 }
 
 // 5. Resolve spec path
-const specPath = projectConfig?.specUrl
-    ? new URL(projectConfig.specUrl).pathname
-    : '/v3/api-docs';
+let specPath = '/v3/api-docs';
+if (projectConfig?.specUrl) {
+    try {
+        specPath = new URL(projectConfig.specUrl).pathname;
+    } catch {
+        specPath = projectConfig.specUrl;
+    }
+}
 
 // 6. Resolve auth strategy — project auth.ts > config authType > default basic
 let authStrategy: AuthStrategy = new BasicAuthStrategy();

@@ -5,7 +5,7 @@ export interface ClassificationResult {
 
 const SAFE_HOSTNAMES = new Set(['localhost']);
 const SAFE_IPS = new Set(['127.0.0.1', '::1']);
-const SAFE_SUFFIXES = ['.local', '.dev', '.test'];
+const SAFE_SUFFIXES = ['.local', '.test'];
 
 export function classifyUrl(
     url: string,
