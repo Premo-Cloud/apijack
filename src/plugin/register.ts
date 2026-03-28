@@ -18,7 +18,7 @@ export function registerPluginCommand(
         .command('install')
         .description('Register as a Claude Code plugin')
         .option('--cli-invocation <args...>', 'How to invoke this CLI (e.g., bun run src/cli.ts)')
-        .option('--generated-dir <dir>', 'Path to generated files directory', 'src/generated')
+        .option('--generated-dir <dir>', 'Path to generated files directory', '.apijack/generated')
         .action(async (opts: { cliInvocation?: string[]; generatedDir?: string }) => {
             const paths = getPluginPaths(version);
 

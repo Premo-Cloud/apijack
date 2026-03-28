@@ -35,7 +35,7 @@ let generatedDir: string;
 if (projectConfig?.generatedDir && projectRoot) {
     generatedDir = resolve(projectRoot, projectConfig.generatedDir);
 } else if (projectRoot) {
-    generatedDir = resolve(projectRoot, 'src', 'generated');
+    generatedDir = resolve(projectRoot, '.apijack', 'generated');
 } else {
     const env = getActiveEnvConfig(CLI_NAME, { configPath: join(configDir, 'config.json') });
     const hostname = env?.url ? new URL(env.url).hostname : 'default';

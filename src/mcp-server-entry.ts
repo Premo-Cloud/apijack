@@ -44,7 +44,7 @@ if (import.meta.main) {
     if (projectConfig?.generatedDir && projectConfigPath) {
         generatedDir = resolve(projectRoot, projectConfig.generatedDir);
     } else if (projectConfigPath) {
-        generatedDir = resolve(projectRoot, 'src', 'generated');
+        generatedDir = resolve(projectRoot, '.apijack', 'generated');
     } else {
         // Global mode — use hostname-based path
         const env = getActiveEnvConfig('apijack', { configPath });

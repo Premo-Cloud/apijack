@@ -298,7 +298,7 @@ export function createHandlers(opts: McpServerOptions) {
                 if (projectConfig?.generatedDir) {
                     return resolve(projectRoot, projectConfig.generatedDir);
                 }
-                return resolve(projectRoot, 'src', 'generated');
+                return resolve(projectRoot, '.apijack', 'generated');
             }
         }
         return opts.generatedDir;
@@ -469,7 +469,7 @@ export function createHandlers(opts: McpServerOptions) {
                 return textResult(lines.join('\n'));
             } catch {
                 return textResult(
-                    `Command map not available. Run generate first.\n`
+                    'Command map not available. Run generate first.\n'
                     + `Looked in: ${getGeneratedDir()}/command-map.ts`,
                     true,
                 );
@@ -494,7 +494,7 @@ export function createHandlers(opts: McpServerOptions) {
                 return textResult(JSON.stringify(info, null, 2));
             } catch {
                 return textResult(
-                    `Command map not available. Run generate first.\n`
+                    'Command map not available. Run generate first.\n'
                     + `Looked in: ${getGeneratedDir()}/command-map.ts`,
                     true,
                 );
@@ -580,12 +580,12 @@ export function createHandlers(opts: McpServerOptions) {
                 return textResult(
                     `Types defined in ${typesPath}:\n`
                     + blocks.join(', ')
-                    + `\n\nUse get_spec with verbose=true to see full definitions, `
-                    + `or get_spec with command="<command>" to see a specific command's signature.`,
+                    + '\n\nUse get_spec with verbose=true to see full definitions, '
+                    + 'or get_spec with command="<command>" to see a specific command\'s signature.',
                 );
             } catch {
                 return textResult(
-                    `Types file not available. Run generate first.\n`
+                    'Types file not available. Run generate first.\n'
                     + `Looked in: ${getGeneratedDir()}/types.ts`,
                     true,
                 );
@@ -632,7 +632,7 @@ export function createHandlers(opts: McpServerOptions) {
                         } catch {}
                         writeFileSync(apijackJsonPath, JSON.stringify({
                             specUrl,
-                            generatedDir: 'src/generated',
+                            generatedDir: '.apijack/generated',
                         }, null, 2) + '\n');
                     }
                 }
