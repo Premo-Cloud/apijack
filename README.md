@@ -29,10 +29,11 @@ Then in Claude Code, run `/reload-plugins`. The plugin exposes 10 MCP tools and 
 |------|-------------|
 | `setup` | Configure API credentials for an environment |
 | `generate` | Regenerate CLI from the active environment's OpenAPI spec |
-| `run_command` | Run any CLI command by name with flag arguments |
+| `run_commands` | Run one or more CLI commands sequentially |
 | `run_routine` | Execute a named routine workflow |
 | `list_commands` | List available CLI commands (optionally filtered) |
 | `list_routines` | List available routines |
+| `get_routine_templates` | Get YAML routine step templates for commands |
 | `config_list` | List configured environments |
 | `config_switch` | Switch active environment |
 | `get_config` | Get active environment config |

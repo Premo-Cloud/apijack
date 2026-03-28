@@ -9,17 +9,48 @@ Routines are YAML workflows that chain CLI commands. They live in `~/.<cli>/rout
 
 ## IMPORTANT: Always Prefer Routines
 
-**ALWAYS use routines** for multi-step workflows. Routines support variables, loops, randomization, and output capture — use `create_routine` + `run_routine` instead of multiple `run_command` or `run_commands` calls. Only fall back to `run_commands` when each call needs unique LLM-generated values that can't be expressed as variables or built-in functions.
+**ALWAYS use routines** for multi-step workflows. Routines support variables, loops, randomization, and output capture — use `create_routine` + `run_routine` instead of multiple `run_commands` calls. Only fall back to `run_commands` when each call needs unique LLM-generated values that can't be expressed as variables or built-in functions.
+
+## IMPORTANT: Use Loops, Not Hardcoded Steps
+
+When a routine repeats an operation N times, **always use `range` or `forEach`** — never hardcode N individual steps. Use `shuffle: true` for random order and `reverse: true` for reverse order. Use built-in functions like `$_random_hex_color` instead of hardcoding values.
+
+**Bad** (50 hardcoded steps):
+```yaml
+- name: create-01
+  command: todos create
+  args: { --title: "Todo 1" }
+- name: create-02
+  command: todos create
+  args: { --title: "Todo 2" }
+# ... 48 more
+```
+
+**Good** (1 loop):
+```yaml
+- name: create-todos
+  range: [1, 50]
+  as: n
+  steps:
+    - name: create
+      command: todos create
+      args:
+        --title: "Todo $n"
+```
 
 ## Discover Commands First
 
-Use `describe_command` MCP tool to see a command's full argument schema (path params, query params, body fields with types). Or use `-o routine-step` on the CLI:
+Use `get_routine_templates` to get YAML step templates for multiple commands at once:
 
-```bash
-<cli> resources create --name test -o routine-step
+```json
+get_routine_templates({ commands: [
+  { command: "todos create", args: { "--title": "example" } },
+  { command: "todos patch", args: { "--id": "xxx", "--color": "#fff" } },
+  { command: "todos delete" }
+]})
 ```
 
-This shows what args a command accepts. Always do this before writing a routine step.
+This returns each command as a ready-to-use routine step with all available args shown. Use `describe_command` for the full argument schema (types, required/optional, descriptions).
 
 ## Routine Structure
 

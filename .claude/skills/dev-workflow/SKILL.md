@@ -122,6 +122,21 @@ Use conventional commits — the publish workflow uses these to determine versio
 | Merge PR | `gh pr merge <num> --merge` |
 | Watch publish | `gh run list --branch main --limit 1` |
 
+## Testing Plugin Changes Locally
+
+If you changed MCP tools or skills and want to test them before shipping, use the dev-plugin script to overwrite the cached plugin:
+
+```bash
+./scripts/dev-plugin.sh            # build + overwrite cache
+# Then run /reload-plugins in Claude Code
+
+# When done testing:
+./scripts/dev-plugin.sh --restore  # restore the original cache
+# Then run /reload-plugins again
+```
+
+This is optional — only needed when you want to test MCP tool or skill changes interactively via Claude Code before shipping.
+
 ## Important Notes
 
 - **Never push directly to main** — always go through dev + PR

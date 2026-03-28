@@ -30,33 +30,11 @@ export interface ToolDefinition {
 export function getToolDefinitions(): ToolDefinition[] {
     return [
         {
-            name: 'run_command',
-            description:
-        'Run a CLI command with optional flag arguments. Path parameters go in the command string '
-        + '(e.g. "todos patch <id>"). Use args for flags only (e.g. {"--title": "value"}).',
-            inputSchema: {
-                type: 'object',
-                properties: {
-                    command: {
-                        type: 'string',
-                        description:
-              'Command path with path params inline, e.g. "todos create" or "todos patch abc-123"',
-                    },
-                    args: {
-                        type: 'object',
-                        description:
-              'Flag arguments as key-value pairs, e.g. {"--title": "test", "--color": "#ff0000"}',
-                        additionalProperties: { type: 'string' },
-                    },
-                },
-                required: ['command'],
-            },
-        },
-        {
             name: 'run_commands',
             description:
-        'Run multiple CLI commands sequentially in a single call. Prefer routines (create_routine + run_routine) '
-        + 'for repeatable workflows. Use run_commands only when each call needs unique LLM-generated values.',
+        'Run one or more CLI commands sequentially. Path parameters go in the command string '
+        + '(e.g. "todos patch <id>"). Use args for flags (e.g. {"--title": "value"}). '
+        + 'Prefer routines (create_routine + run_routine) for repeatable workflows.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -198,6 +176,38 @@ export function getToolDefinitions(): ToolDefinition[] {
             },
         },
         {
+            name: 'get_routine_templates',
+            description:
+        'Get YAML routine step templates for multiple commands at once. '
+        + 'Returns each command as a routine step with provided args and available options as comments. '
+        + 'Use this to discover command signatures when building routines.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    commands: {
+                        type: 'array',
+                        description: 'Commands to get templates for',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                command: {
+                                    type: 'string',
+                                    description: 'Command path, e.g. "todos create" or "todos patch"',
+                                },
+                                args: {
+                                    type: 'object',
+                                    description: 'Optional example args to include in template',
+                                    additionalProperties: { type: 'string' },
+                                },
+                            },
+                            required: ['command'],
+                        },
+                    },
+                },
+                required: ['commands'],
+            },
+        },
+        {
             name: 'get_config',
             description:
         'Get the active environment configuration (password is stripped).',
@@ -224,9 +234,9 @@ export function getToolDefinitions(): ToolDefinition[] {
         {
             name: 'setup',
             description:
-        'Configure API credentials for an environment. Only works for development URLs '
-        + '(localhost, .local, .dev, .test, .staging, and configured CIDR ranges). '
-        + 'For production APIs, use environment variables.',
+        'Configure API credentials for an environment and auto-generate the CLI. '
+        + 'Only works for development URLs (localhost, .local, .dev, .test, .staging, '
+        + 'and configured CIDR ranges). For production APIs, use environment variables.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -306,28 +316,6 @@ export function createHandlers(opts: McpServerOptions) {
     }
 
     return {
-        run_command: async (input: {
-            command: string;
-            args?: Record<string, string>;
-        }): Promise<ToolResult> => {
-            const cmdParts = input.command.split(/\s+/);
-            const flagArgs = Object.entries(input.args || {}).flatMap(([k, v]) => [
-                k,
-                String(v),
-            ]);
-            const { stdout, stderr, exitCode } = await runCli(opts.cliInvocation, [
-                ...cmdParts,
-                ...flagArgs,
-            ], opts.projectRoot ?? undefined);
-            if (exitCode !== 0) {
-                return textResult(
-                    `Command failed (exit ${exitCode}):\n${stderr || stdout}`,
-                    true,
-                );
-            }
-            return textResult(stdout);
-        },
-
         run_commands: async (input: {
             commands: Array<{ command: string; args?: Record<string, string> }>;
             stop_on_error?: boolean;
@@ -539,6 +527,30 @@ export function createHandlers(opts: McpServerOptions) {
             }
         },
 
+        get_routine_templates: async (input: {
+            commands: Array<{ command: string; args?: Record<string, string> }>;
+        }): Promise<ToolResult> => {
+            const templates: string[] = [];
+            for (const cmd of input.commands) {
+                const cmdParts = cmd.command.split(/\s+/);
+                const flagArgs = Object.entries(cmd.args || {}).flatMap(([k, v]) => [
+                    k,
+                    String(v),
+                ]);
+                const { stdout, stderr, exitCode } = await runCli(opts.cliInvocation, [
+                    ...cmdParts,
+                    ...flagArgs,
+                    '-o', 'routine-step',
+                ], opts.projectRoot ?? undefined);
+                if (exitCode !== 0) {
+                    templates.push(`# Error getting template for: ${cmd.command}\n# ${(stderr || stdout).trim()}`);
+                } else {
+                    templates.push(stdout.trim());
+                }
+            }
+            return textResult(templates.join('\n\n'));
+        },
+
         get_config: async (): Promise<ToolResult> => {
             const env = getActiveEnvConfig(opts.cliName, opts.configPath ? { configPath: opts.configPath } : undefined);
             if (!env) {
@@ -650,10 +662,32 @@ export function createHandlers(opts: McpServerOptions) {
                     user: input.user,
                     password: input.password,
                 }, true, configOpts);
-                return textResult(`Environment "${input.name}" configured (${input.url})`);
             } catch (err) {
                 return textResult(
                     `Setup failed: ${err instanceof Error ? err.message : String(err)}`,
+                    true,
+                );
+            }
+
+            // Auto-generate CLI after successful setup
+            try {
+                const { stdout: genOut, stderr: genErr, exitCode: genCode } = await runCli(
+                    opts.cliInvocation, ['generate'], opts.projectRoot ?? undefined,
+                );
+                if (genCode !== 0) {
+                    return textResult(
+                        `Environment "${input.name}" configured (${input.url})\n`
+                        + `Generate failed (exit ${genCode}):\n${genErr || genOut}`,
+                        true,
+                    );
+                }
+                return textResult(
+                    `Environment "${input.name}" configured (${input.url})\n${genOut.trim()}`,
+                );
+            } catch {
+                return textResult(
+                    `Environment "${input.name}" configured (${input.url})\n`
+                    + 'Generate could not run. Run generate manually.',
                     true,
                 );
             }

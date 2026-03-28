@@ -26,6 +26,11 @@ describe("getToolDefinitions()", () => {
     expect(tools).toHaveLength(13);
   });
 
+  test("does not include removed run_command tool", () => {
+    const names = tools.map((t) => t.name);
+    expect(names).not.toContain("run_command");
+  });
+
   test("all tools have required fields", () => {
     for (const tool of tools) {
       expect(typeof tool.name).toBe("string");
@@ -46,21 +51,21 @@ describe("getToolDefinitions()", () => {
       "describe_command",
       "generate",
       "get_config",
+      "get_routine_templates",
       "get_spec",
       "list_commands",
       "list_routines",
-      "run_command",
       "run_commands",
       "run_routine",
       "setup",
     ]);
   });
 
-  test("run_command requires 'command' parameter", () => {
-    const tool = tools.find((t) => t.name === "run_command")!;
-    expect(tool.inputSchema.required).toContain("command");
-    expect(tool.inputSchema.properties).toHaveProperty("command");
-    expect(tool.inputSchema.properties).toHaveProperty("args");
+  test("run_commands requires 'commands' parameter", () => {
+    const tool = tools.find((t) => t.name === "run_commands")!;
+    expect(tool.inputSchema.required).toContain("commands");
+    expect(tool.inputSchema.properties).toHaveProperty("commands");
+    expect(tool.inputSchema.properties).toHaveProperty("stop_on_error");
   });
 
   test("run_routine requires 'name' parameter", () => {
@@ -234,25 +239,23 @@ describe("get_config handler", () => {
   });
 });
 
-// ── Handler: run_command ────────────────────────────────────────────
+// ── Handler: run_commands ───────────────────────────────────────────
 
-describe("run_command handler", () => {
-  test("constructs correct CLI args array", async () => {
-    // We spy on Bun.spawn to verify the args without actually running a CLI
+describe("run_commands handler", () => {
+  test("constructs correct CLI args for each command", async () => {
     const spawnCalls: unknown[][] = [];
     const origSpawn = Bun.spawn;
 
     // @ts-ignore - mocking Bun.spawn
-    Bun.spawn = (cmd: string[], opts: any) => {
+    Bun.spawn = (cmd: string[], _opts: any) => {
       spawnCalls.push(cmd);
-      const emptyStream = new ReadableStream({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode("ok"));
-          controller.close();
-        },
-      });
       return {
-        stdout: emptyStream,
+        stdout: new ReadableStream({
+          start(c) {
+            c.enqueue(new TextEncoder().encode("ok"));
+            c.close();
+          },
+        }),
         stderr: new ReadableStream({
           start(c) {
             c.close();
@@ -264,12 +267,14 @@ describe("run_command handler", () => {
 
     const opts = makeOpts();
     const handlers = createHandlers(opts);
-    await handlers.run_command({
-      command: "admin users create",
-      args: { "--name": "test", "--active": "true" },
+    await handlers.run_commands({
+      commands: [
+        { command: "admin users create", args: { "--name": "test" } },
+        { command: "matters list" },
+      ],
     });
 
-    expect(spawnCalls).toHaveLength(1);
+    expect(spawnCalls).toHaveLength(2);
     expect(spawnCalls[0]).toEqual([
       "/usr/bin/testcli",
       "admin",
@@ -277,20 +282,19 @@ describe("run_command handler", () => {
       "create",
       "--name",
       "test",
-      "--active",
-      "true",
     ]);
+    expect(spawnCalls[1]).toEqual(["/usr/bin/testcli", "matters", "list"]);
 
     // @ts-ignore - restore
     Bun.spawn = origSpawn;
   });
 
-  test("constructs args without flags when args not provided", async () => {
+  test("works with single command in array", async () => {
     const spawnCalls: unknown[][] = [];
     const origSpawn = Bun.spawn;
 
     // @ts-ignore
-    Bun.spawn = (cmd: string[], opts: any) => {
+    Bun.spawn = (cmd: string[], _opts: any) => {
       spawnCalls.push(cmd);
       return {
         stdout: new ReadableStream({
@@ -310,8 +314,11 @@ describe("run_command handler", () => {
 
     const opts = makeOpts();
     const handlers = createHandlers(opts);
-    await handlers.run_command({ command: "matters list" });
+    await handlers.run_commands({
+      commands: [{ command: "matters list" }],
+    });
 
+    expect(spawnCalls).toHaveLength(1);
     expect(spawnCalls[0]).toEqual(["/usr/bin/testcli", "matters", "list"]);
 
     // @ts-ignore
@@ -592,7 +599,7 @@ describe("get_spec handler", () => {
 // ── Handler: setup ──────────────────────────────────────────────────
 
 describe("setup handler", () => {
-  test("stores credentials for localhost URL", async () => {
+  test("stores credentials for localhost URL and attempts generate", async () => {
     const { mkdirSync, rmSync, readFileSync } = await import("fs");
     const { homedir } = await import("os");
     const configDir = homedir() + "/.testcli-mcp-setup";
@@ -607,8 +614,9 @@ describe("setup handler", () => {
       password: "secret",
     });
 
-    expect(result.isError).toBeUndefined();
+    // Setup saves credentials then auto-runs generate (which fails in test — no real CLI)
     expect(result.content[0].text).toContain("dev");
+    expect(result.content[0].text).toContain("configured");
 
     const config = JSON.parse(readFileSync(configDir + "/config.json", "utf-8"));
     expect(config.active).toBe("dev");
@@ -651,7 +659,8 @@ describe("setup handler", () => {
       password: "secret",
     });
 
-    expect(result.isError).toBeUndefined();
+    // Setup saves credentials then auto-runs generate (which fails in test — no real CLI)
+    expect(result.content[0].text).toContain("configured");
 
     const config = JSON.parse(readFileSync(configDir + "/config.json", "utf-8"));
     expect(config.environments.internal.url).toBe("http://192.168.1.50:8080");
