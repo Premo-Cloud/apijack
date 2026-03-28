@@ -181,7 +181,7 @@ ok "Published to npm"
 info "Pulling version bump..."
 sleep 5  # Wait for the version bump commit to land
 git checkout main --quiet && git pull --quiet
-git checkout dev --quiet && git pull origin main --quiet
+git checkout dev --quiet && git pull origin main --quiet && git push
 
 VERSION=$(node -p "require('./package.json').version")
 ok "Shipped v$VERSION"

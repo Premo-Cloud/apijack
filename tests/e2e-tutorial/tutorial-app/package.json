@@ -1,0 +1,13 @@
+{
+  "name": "apijack-tutorial",
+  "version": "1.0.0",
+  "description": "A simple TODO API for the apijack tutorial",
+  "type": "module",
+  "scripts": {
+    "start": "bun run src/server.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
