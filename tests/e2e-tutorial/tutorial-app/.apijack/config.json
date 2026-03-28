@@ -1,0 +1,10 @@
+{
+  "active": "dev",
+  "environments": {
+    "dev": {
+      "url": "http://localhost:3456",
+      "user": "admin",
+      "password": "admin"
+    }
+  }
+}

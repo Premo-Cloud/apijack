@@ -1,0 +1,46 @@
+name: tutorial-e2e
+description: >
+  End-to-end test of the full tutorial workflow:
+  create 50 TODOs, color each randomly in shuffled order,
+  delete all in reverse creation order, verify empty.
+
+steps:
+  - name: create-todos
+    range: [1, 50]
+    as: n
+    steps:
+      - name: create
+        command: todos create
+        args:
+          --title: "Todo $n"
+
+  - name: verify-created
+    command: todos list
+    output: all_todos
+    assert: "$all_todos.length == 50"
+
+  - name: color-todos
+    forEach: "$all_todos"
+    shuffle: true
+    as: todo
+    steps:
+      - name: color
+        command: todos patch
+        args:
+          --id: "$todo.id"
+          --color: "$_random_hex_color"
+
+  - name: delete-todos
+    forEach: "$all_todos"
+    reverse: true
+    as: todo
+    steps:
+      - name: delete
+        command: todos delete
+        args:
+          --id: "$todo.id"
+
+  - name: verify-empty
+    command: todos list
+    output: final
+    assert: "$final.length == 0"
