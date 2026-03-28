@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from 'fs';
 import { dirname, join, resolve } from 'path';
 import { homedir } from 'os';
+import { findProjectConfig, loadProjectConfig, resolveConfigDir } from './project';
+import { getActiveEnvConfig } from './config';
 
 export interface PluginConfig {
     cliInvocation: string[];
@@ -20,23 +22,6 @@ export function loadPluginConfig(dataDir?: string): PluginConfig | null {
     }
 }
 
-/**
- * Resolve generatedDir to an absolute path.
- * If already absolute, use as-is.
- * If relative, resolve relative to the CLI entrypoint's package root.
- */
-function resolveGeneratedDir(config: PluginConfig): string {
-    const dir = config.generatedDir;
-    if (dir.startsWith('/')) return dir;
-
-    // Resolve relative to the directory containing the CLI entrypoint
-    // e.g. cliInvocation = ["bun", "/path/to/package/bin/apijack.ts"]
-    // → package root = /path/to/package
-    const cliEntry = config.cliInvocation[config.cliInvocation.length - 1];
-    const packageRoot = dirname(dirname(cliEntry));
-    return resolve(packageRoot, dir);
-}
-
 // Entry point — only runs when executed directly
 if (import.meta.main) {
     const config = loadPluginConfig();
@@ -46,12 +31,35 @@ if (import.meta.main) {
         process.exit(1);
     }
 
+    // Detect project mode from CWD
+    const cwd = process.cwd();
+    const projectConfigPath = findProjectConfig(cwd);
+    const projectConfig = projectConfigPath ? loadProjectConfig(projectConfigPath) : null;
+    const projectRoot = projectConfigPath ? dirname(projectConfigPath) : cwd;
+    const configDir = resolveConfigDir(projectConfigPath);
+    const configPath = join(configDir, 'config.json');
+
+    // Resolve generatedDir using same logic as CLI entry point
+    let generatedDir: string;
+    if (projectConfig?.generatedDir && projectConfigPath) {
+        generatedDir = resolve(projectRoot, projectConfig.generatedDir);
+    } else if (projectConfigPath) {
+        generatedDir = resolve(projectRoot, 'src', 'generated');
+    } else {
+        // Global mode — use hostname-based path
+        const env = getActiveEnvConfig('apijack', { configPath });
+        const hostname = env?.url ? new URL(env.url).hostname : 'default';
+        generatedDir = join(homedir(), '.apijack', 'apis', hostname, 'generated');
+    }
+
     const { startMcpServer } = await import('./mcp-server');
     await startMcpServer({
         cliName: 'apijack',
         cliInvocation: config.cliInvocation,
-        generatedDir: resolveGeneratedDir(config),
-        routinesDir: join(homedir(), '.apijack', 'routines'),
+        generatedDir,
+        routinesDir: join(configDir, 'routines'),
+        projectRoot,
+        configPath,
         allowedCidrs: config.allowedCidrs,
     });
 }

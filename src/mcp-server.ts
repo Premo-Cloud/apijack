@@ -1,14 +1,17 @@
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
+import { resolve, join, dirname } from 'path';
 import { listRoutinesStructured } from './routine/loader';
 import { getActiveEnvConfig, saveEnvironment } from './config';
 import { classifyUrl } from './url-classifier';
+import { findProjectConfig, loadProjectConfig } from './project';
 
 export interface McpServerOptions {
     cliName: string;
     cliInvocation: string[]; // e.g. ["bun", "run", "src/cli.ts"] or ["/path/to/binary"]
     generatedDir: string;
     routinesDir: string;
+    projectRoot?: string;
+    configPath?: string;
     allowedCidrs?: string[];
 }
 
@@ -191,10 +194,12 @@ function textResult(text: string, isError?: boolean): ToolResult {
 async function runCli(
     cliInvocation: string[],
     args: string[],
+    cwd?: string,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     const proc = Bun.spawn([...cliInvocation, ...args], {
         stdout: 'pipe',
         stderr: 'pipe',
+        ...(cwd ? { cwd } : {}),
     });
     const stdout = await new Response(proc.stdout).text();
     const stderr = await new Response(proc.stderr).text();
@@ -205,6 +210,24 @@ async function runCli(
 // ── Handlers ────────────────────────────────────────────────────────
 
 export function createHandlers(opts: McpServerOptions) {
+    // Lazily resolve generatedDir based on current project state.
+    // This handles the case where setup+generate create .apijack.json and
+    // generated files after the MCP server has already started.
+    function getGeneratedDir(): string {
+        if (opts.projectRoot) {
+            const projectConfigPath = findProjectConfig(opts.projectRoot);
+            if (projectConfigPath) {
+                const projectConfig = loadProjectConfig(projectConfigPath);
+                const projectRoot = dirname(projectConfigPath);
+                if (projectConfig?.generatedDir) {
+                    return resolve(projectRoot, projectConfig.generatedDir);
+                }
+                return resolve(projectRoot, 'src', 'generated');
+            }
+        }
+        return opts.generatedDir;
+    }
+
     return {
         run_command: async (input: {
             command: string;
@@ -218,7 +241,7 @@ export function createHandlers(opts: McpServerOptions) {
             const { stdout, stderr, exitCode } = await runCli(opts.cliInvocation, [
                 ...cmdParts,
                 ...flagArgs,
-            ]);
+            ], opts.projectRoot ?? undefined);
             if (exitCode !== 0) {
                 return textResult(
                     `Command failed (exit ${exitCode}):\n${stderr || stdout}`,
@@ -241,7 +264,7 @@ export function createHandlers(opts: McpServerOptions) {
                 'run',
                 input.name,
                 ...setArgs,
-            ]);
+            ], opts.projectRoot ?? undefined);
             if (exitCode !== 0) {
                 return textResult(
                     `Routine failed (exit ${exitCode}):\n${stderr || stdout}`,
@@ -254,7 +277,7 @@ export function createHandlers(opts: McpServerOptions) {
         generate: async (): Promise<ToolResult> => {
             const { stdout, stderr, exitCode } = await runCli(opts.cliInvocation, [
                 'generate',
-            ]);
+            ], opts.projectRoot ?? undefined);
             if (exitCode !== 0) {
                 return textResult(
                     `Generate failed (exit ${exitCode}):\n${stderr || stdout}`,
@@ -269,7 +292,7 @@ export function createHandlers(opts: McpServerOptions) {
                 'config',
                 'switch',
                 input.name,
-            ]);
+            ], opts.projectRoot ?? undefined);
             if (exitCode !== 0) {
                 return textResult(
                     `Config switch failed (exit ${exitCode}):\n${stderr || stdout}`,
@@ -283,7 +306,7 @@ export function createHandlers(opts: McpServerOptions) {
             const { stdout, stderr, exitCode } = await runCli(opts.cliInvocation, [
                 'config',
                 'list',
-            ]);
+            ], opts.projectRoot ?? undefined);
             if (exitCode !== 0) {
                 return textResult(
                     `Config list failed (exit ${exitCode}):\n${stderr || stdout}`,
@@ -297,7 +320,7 @@ export function createHandlers(opts: McpServerOptions) {
             filter?: string;
         }): Promise<ToolResult> => {
             try {
-                const mapPath = resolve(opts.generatedDir, 'command-map');
+                const mapPath = resolve(getGeneratedDir(), 'command-map');
                 const mapModule = await import(mapPath);
                 const commandMap: Record<
                     string,
@@ -356,7 +379,7 @@ export function createHandlers(opts: McpServerOptions) {
         },
 
         get_config: async (): Promise<ToolResult> => {
-            const env = getActiveEnvConfig(opts.cliName);
+            const env = getActiveEnvConfig(opts.cliName, opts.configPath ? { configPath: opts.configPath } : undefined);
             if (!env) {
                 return textResult('No active environment configured.', true);
             }
@@ -367,7 +390,7 @@ export function createHandlers(opts: McpServerOptions) {
 
         get_spec: async (): Promise<ToolResult> => {
             try {
-                const typesPath = resolve(opts.generatedDir, 'types.ts');
+                const typesPath = resolve(getGeneratedDir(), 'types.ts');
                 const content = readFileSync(typesPath, 'utf-8');
 
                 const interfaceMatches = content.match(/^export interface /gm);
@@ -421,12 +444,42 @@ export function createHandlers(opts: McpServerOptions) {
                 );
             }
 
+            // Bootstrap project config if in a project directory without .apijack.json
+            if (opts.projectRoot) {
+                const apijackJsonPath = join(opts.projectRoot, '.apijack.json');
+                if (!existsSync(apijackJsonPath)) {
+                    const hasPackageJson = existsSync(join(opts.projectRoot, 'package.json'));
+                    const hasGit = existsSync(join(opts.projectRoot, '.git'));
+                    if (hasPackageJson || hasGit) {
+                        let specUrl = '/v3/api-docs';
+                        try {
+                            specUrl = new URL(input.url).pathname || '/v3/api-docs';
+                            if (specUrl === '/') specUrl = '/v3/api-docs';
+                        } catch {}
+                        writeFileSync(apijackJsonPath, JSON.stringify({
+                            specUrl,
+                            generatedDir: 'src/generated',
+                        }, null, 2) + '\n');
+                    }
+                }
+            }
+
+            // Ensure config dir exists
+            if (opts.configPath) {
+                const configDir = dirname(opts.configPath);
+                mkdirSync(configDir, { recursive: true });
+            }
+
             try {
+                const configOpts: { configPath?: string; allowedCidrs?: string[] } = {
+                    allowedCidrs: opts.allowedCidrs,
+                };
+                if (opts.configPath) configOpts.configPath = opts.configPath;
                 await saveEnvironment(opts.cliName, input.name, {
                     url: input.url,
                     user: input.user,
                     password: input.password,
-                }, true, { allowedCidrs: opts.allowedCidrs });
+                }, true, configOpts);
                 return textResult(`Environment "${input.name}" configured (${input.url})`);
             } catch (err) {
                 return textResult(
