@@ -350,7 +350,7 @@ export function createCli(options: CliOptions): Cli {
                 .description('Start MCP server for AI agent integration')
                 .action(async () => {
                     try {
-                        const { startMcpServer } = await import('./mcp-server');
+                        const { startMcpServer } = await import('./mcp/server');
                         await startMcpServer({
                             cliName: options.name,
                             cliInvocation: process.argv.slice(0, 2),

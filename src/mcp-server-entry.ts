@@ -52,7 +52,7 @@ if (import.meta.main) {
         generatedDir = join(homedir(), '.apijack', 'apis', hostname, 'generated');
     }
 
-    const { startMcpServer } = await import('./mcp-server');
+    const { startMcpServer } = await import('./mcp/server');
     await startMcpServer({
         cliName: 'apijack',
         cliInvocation: config.cliInvocation,

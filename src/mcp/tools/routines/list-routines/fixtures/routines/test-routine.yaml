@@ -1,0 +1,4 @@
+name: test-routine
+steps:
+  - name: step1
+    command: admin list
