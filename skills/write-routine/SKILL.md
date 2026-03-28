@@ -7,26 +7,19 @@ description: Use when building apijack YAML routines — workflow automations th
 
 Routines are YAML workflows that chain CLI commands. They live in `~/.<cli>/routines/` (or `./routines/` in project mode).
 
+## IMPORTANT: Always Prefer Routines
+
+**ALWAYS use routines** for multi-step workflows. Routines support variables, loops, randomization, and output capture — use `create_routine` + `run_routine` instead of multiple `run_command` or `run_commands` calls. Only fall back to `run_commands` when each call needs unique LLM-generated values that can't be expressed as variables or built-in functions.
+
 ## Discover Commands First
 
-Use `-o routine-step` on any CLI command to get its YAML signature:
+Use `describe_command` MCP tool to see a command's full argument schema (path params, query params, body fields with types). Or use `-o routine-step` on the CLI:
 
 ```bash
 <cli> resources create --name test -o routine-step
 ```
 
-Outputs:
-
-```yaml
-- name: create
-  command: resources create
-  args:
-    --name: "test"
-    # --description: "" # optional -- Resource description
-    # --tags: "" # optional -- Comma-separated tags
-```
-
-This is the primary way to discover what args a command accepts. Always do this before writing a routine step.
+This shows what args a command accepts. Always do this before writing a routine step.
 
 ## Routine Structure
 
@@ -44,10 +37,18 @@ steps:
     output: created
 ```
 
-### Built-in Variables
+### Built-in Variables and Functions
 
+**Variables:**
 - `$_timestamp` — Unix epoch seconds
 - `$_date` — ISO date (YYYY-MM-DD)
+- `$_uuid` — random UUID
+
+**Randomization functions (evaluated fresh each time):**
+- `$_random_hex_color` — random `#rrggbb` color
+- `$_random_int(min,max)` — random integer in range
+- `$_random_from(a,b,c)` — pick one randomly (may repeat)
+- `$_random_distinct_from(a,b,c)` — pick one randomly, no repeats until all used (then cycles)
 
 Variables can reference other variables in defaults: `run_id: "run-$_timestamp"`.
 
@@ -103,6 +104,33 @@ Supported operators: `==`, `!=`, or bare `$ref` for truthy check.
         --id: "$item.id"
 ```
 
+**Modifiers:**
+- `shuffle: true` — randomize iteration order
+- `reverse: true` — iterate in reverse order
+
+```yaml
+- name: color-randomly
+  forEach: "$todos"
+  shuffle: true
+  as: todo
+  steps:
+    - name: update-color
+      command: todos patch
+      args:
+        --id: "$todo.id"
+        --color: "$_random_hex_color"
+
+- name: delete-reversed
+  forEach: "$todos"
+  reverse: true
+  as: todo
+  steps:
+    - name: delete
+      command: todos delete
+      args:
+        --id: "$todo.id"
+```
+
 ### range — iterate over numbers
 
 ```yaml
@@ -115,6 +143,8 @@ Supported operators: `==`, `!=`, or bare `$ref` for truthy check.
       args:
         --number: "$page"
 ```
+
+Range also supports `shuffle: true` and `reverse: true`.
 
 ## Assertions
 

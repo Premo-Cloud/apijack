@@ -1,6 +1,6 @@
 import type { OpenApiOperation, OpenApiSchema } from './openapi-types';
 import { HTTP_METHODS } from './openapi-types';
-import { normalizeTag } from './util';
+import { normalizeTag, resolveSchemaProps } from './util';
 
 /**
  * Generate a command map that maps CLI command paths to their
@@ -22,6 +22,7 @@ export function generateCommandMap(
                 pathParams: string[];
                 queryParams: string[];
                 hasBody: boolean;
+                bodyFields: Array<{ name: string; type: string; required: boolean; description?: string }>;
                 summary?: string;
             }>
         >
@@ -58,6 +59,7 @@ export function generateCommandMap(
             const bodySchema
                 = op.requestBody?.content?.['application/json']?.schema;
             const hasBody = !!bodySchema;
+            const bodyProps = hasBody ? resolveSchemaProps(bodySchema, schemas) : [];
             const hasPathId = pathParams.length > 0;
 
             let verb: string;
@@ -91,6 +93,12 @@ export function generateCommandMap(
                 pathParams: pathParams.map(p => p.name),
                 queryParams: queryParams.map(p => p.name),
                 hasBody,
+                bodyFields: bodyProps.map(p => ({
+                    name: p.name,
+                    type: p.type,
+                    required: !!p.required,
+                    ...(p.description ? { description: p.description } : {}),
+                })),
                 summary: op.summary || op.description,
             });
         }
@@ -122,8 +130,11 @@ export function generateCommandMap(
                         : `${groupName} ${resourceName} ${cmdName}`;
 
                 const descPart = cmd.summary ? `, description: "${cmd.summary.replace(/"/g, '\\"')}"` : '';
+                const bodyPart = cmd.bodyFields.length > 0
+                    ? `, bodyFields: ${JSON.stringify(cmd.bodyFields)}`
+                    : '';
                 entries.push(
-                    `  "${cmdPath}": { operationId: "${cmd.operationId}", pathParams: [${cmd.pathParams.map(p => `"${p}"`).join(', ')}], queryParams: [${cmd.queryParams.map(p => `"${p}"`).join(', ')}], hasBody: ${cmd.hasBody}${descPart} },`,
+                    `  "${cmdPath}": { operationId: "${cmd.operationId}", pathParams: [${cmd.pathParams.map(p => `"${p}"`).join(', ')}], queryParams: [${cmd.queryParams.map(p => `"${p}"`).join(', ')}], hasBody: ${cmd.hasBody}${bodyPart}${descPart} },`,
                 );
             }
         }
@@ -137,6 +148,7 @@ export function generateCommandMap(
         '  pathParams: string[];',
         '  queryParams: string[];',
         '  hasBody: boolean;',
+        '  bodyFields?: Array<{ name: string; type: string; required: boolean; description?: string }>;',
         '  description?: string;',
         '}',
         '',

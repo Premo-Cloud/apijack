@@ -1,5 +1,5 @@
 import type { RoutineDefinition, RoutineStep, RoutineContext, StepResult } from './types';
-import { resolveValue, resolveArgs, resolvePositionalArgs } from './resolver';
+import { resolveValue, resolveArgs, resolvePositionalArgs, resetDistinctPools } from './resolver';
 import { evaluateCondition } from './condition';
 import type { CommandDispatcher } from '../types';
 
@@ -60,7 +60,10 @@ export async function executeRoutine(
             // range — generates an array for iteration
             if (step.range && step.steps) {
                 const [start, end] = step.range;
-                const items = Array.from({ length: end - start + 1 }, (_, i) => i + start);
+                let items = Array.from({ length: end - start + 1 }, (_, i) => i + start);
+                if (step.shuffle) items = items.sort(() => Math.random() - 0.5);
+                if (step.reverse) items = items.reverse();
+                resetDistinctPools();
                 const asName = step.as || 'item';
                 inIteration = true;
                 for (let j = 0; j < items.length; j++) {
@@ -82,12 +85,19 @@ export async function executeRoutine(
 
             // forEach
             if (step.forEach && step.steps) {
-                const items = resolveValue(step.forEach, parentCtx);
-                if (!Array.isArray(items)) {
+                const rawItems = resolveValue(step.forEach, parentCtx);
+                if (!Array.isArray(rawItems)) {
                     process.stderr.write(`Warning: forEach on "${step.name}" did not resolve to an array\n`);
                     stepsSkipped++;
                     continue;
                 }
+
+                let items = [...rawItems];
+                if (step.shuffle) items = items.sort(() => Math.random() - 0.5);
+                if (step.reverse) items = items.reverse();
+
+                // Reset distinct pools for each forEach block
+                resetDistinctPools();
 
                 const asName = step.as || 'item';
                 inIteration = true;

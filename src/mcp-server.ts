@@ -32,19 +32,20 @@ export function getToolDefinitions(): ToolDefinition[] {
         {
             name: 'run_command',
             description:
-        'Run a CLI command by name with optional flag arguments. Use list_commands to discover available commands first.',
+        'Run a CLI command with optional flag arguments. Path parameters go in the command string '
+        + '(e.g. "todos patch <id>"). Use args for flags only (e.g. {"--title": "value"}).',
             inputSchema: {
                 type: 'object',
                 properties: {
                     command: {
                         type: 'string',
                         description:
-              'The CLI command path, e.g. "todos list" or "admin users create"',
+              'Command path with path params inline, e.g. "todos create" or "todos patch abc-123"',
                     },
                     args: {
                         type: 'object',
                         description:
-              'Optional flag arguments as key-value pairs, e.g. {"--name": "test", "--active": "true"}',
+              'Flag arguments as key-value pairs, e.g. {"--title": "test", "--color": "#ff0000"}',
                         additionalProperties: { type: 'string' },
                     },
                 },
@@ -54,8 +55,8 @@ export function getToolDefinitions(): ToolDefinition[] {
         {
             name: 'run_commands',
             description:
-        'Run multiple CLI commands sequentially in a single call. Each command runs after the previous one completes. '
-        + 'Use this for batch operations like creating many resources. Returns all results.',
+        'Run multiple CLI commands sequentially in a single call. Prefer routines (create_routine + run_routine) '
+        + 'for repeatable workflows. Use run_commands only when each call needs unique LLM-generated values.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -67,16 +68,20 @@ export function getToolDefinitions(): ToolDefinition[] {
                             properties: {
                                 command: {
                                     type: 'string',
-                                    description: 'The CLI command path',
+                                    description: 'Command path with path params inline, e.g. "todos patch abc-123"',
                                 },
                                 args: {
                                     type: 'object',
-                                    description: 'Optional flag arguments as key-value pairs',
+                                    description: 'Flag arguments as key-value pairs',
                                     additionalProperties: { type: 'string' },
                                 },
                             },
                             required: ['command'],
                         },
+                    },
+                    stop_on_error: {
+                        type: 'boolean',
+                        description: 'Stop executing on first failure (default: false — runs all commands)',
                     },
                 },
                 required: ['commands'],
@@ -152,8 +157,8 @@ export function getToolDefinitions(): ToolDefinition[] {
         {
             name: 'describe_command',
             description:
-        'Get the full argument schema for a specific command, including path params, query params, '
-        + 'and request body fields with types and descriptions.',
+        'Get the full argument schema for a command: path params, query params, body fields '
+        + 'with types/required/descriptions. Use this to learn what args a command accepts.',
             inputSchema: {
                 type: 'object',
                 properties: {
@@ -204,15 +209,11 @@ export function getToolDefinitions(): ToolDefinition[] {
         {
             name: 'get_spec',
             description:
-        'Get API type information. Without args: lists type names. With verbose=true: full type definitions. '
-        + 'With command="<name>": shows that command\'s argument signature as a routine step template.',
+        'Get generated API type definitions. Default: lists type names. '
+        + 'With verbose=true: full TypeScript interface definitions with all fields.',
             inputSchema: {
                 type: 'object',
                 properties: {
-                    command: {
-                        type: 'string',
-                        description: 'Show the argument signature for a specific command, e.g. "todos create"',
-                    },
                     verbose: {
                         type: 'boolean',
                         description: 'Return full type definitions instead of just type names',
@@ -329,6 +330,7 @@ export function createHandlers(opts: McpServerOptions) {
 
         run_commands: async (input: {
             commands: Array<{ command: string; args?: Record<string, string> }>;
+            stop_on_error?: boolean;
         }): Promise<ToolResult> => {
             const results: string[] = [];
             let failures = 0;
@@ -346,6 +348,10 @@ export function createHandlers(opts: McpServerOptions) {
                 if (exitCode !== 0) {
                     failures++;
                     results.push(`[${i + 1}/${input.commands.length}] FAIL: ${cmd.command}\n${stderr || stdout}`);
+                    if (input.stop_on_error) {
+                        results.push(`Stopped after ${i + 1}/${input.commands.length} commands.`);
+                        break;
+                    }
                 } else {
                     results.push(`[${i + 1}/${input.commands.length}] OK: ${cmd.command}${stdout ? '\n' + stdout.trim() : ''}`);
                 }
@@ -542,33 +548,8 @@ export function createHandlers(opts: McpServerOptions) {
         },
 
         get_spec: async (input: {
-            command?: string;
             verbose?: boolean;
         }): Promise<ToolResult> => {
-            // If a command is specified, show its schema from the command map
-            if (input.command) {
-                try {
-                    const mapPath = resolve(getGeneratedDir(), 'command-map');
-                    const mapModule = await import(mapPath);
-                    const commandMap = mapModule.commandMap as Record<string, Record<string, unknown>>;
-                    const info = commandMap[input.command];
-                    if (!info) {
-                        const available = Object.keys(commandMap).join(', ');
-                        return textResult(
-                            `Command "${input.command}" not found. Available: ${available}`,
-                            true,
-                        );
-                    }
-                    return textResult(JSON.stringify(info, null, 2));
-                } catch {
-                    return textResult(
-                        'Command map not available. Run generate first.\n'
-                        + `Looked in: ${getGeneratedDir()}/command-map.ts`,
-                        true,
-                    );
-                }
-            }
-
             try {
                 const typesPath = resolve(getGeneratedDir(), 'types.ts');
                 const content = readFileSync(typesPath, 'utf-8');

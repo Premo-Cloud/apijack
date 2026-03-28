@@ -10,6 +10,8 @@ export interface RoutineStep {
     'forEach'?: string;
     'range'?: [number, number];
     'as'?: string;
+    'shuffle'?: boolean;
+    'reverse'?: boolean;
     'steps'?: RoutineStep[];
 }
 

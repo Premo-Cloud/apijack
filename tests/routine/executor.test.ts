@@ -270,6 +270,150 @@ describe("executeRoutine", () => {
     expect(result.stepsFailed).toBe(1);
   });
 
+  test("forEach with reverse iterates in reverse order", async () => {
+    const routine = makeRoutine({
+      variables: { items: ["a", "b", "c", "d"] },
+      steps: [
+        {
+          name: "loop",
+          forEach: "$items",
+          reverse: true,
+          as: "item",
+          steps: [
+            { name: "inner", command: "process", args: { value: "$item" } },
+          ],
+        },
+      ],
+    });
+    const { dispatcher, calls } = makeMockDispatcher();
+    await executeRoutine(routine, {}, dispatcher);
+
+    expect(calls.length).toBe(4);
+    expect(calls[0]!.args.value).toBe("d");
+    expect(calls[1]!.args.value).toBe("c");
+    expect(calls[2]!.args.value).toBe("b");
+    expect(calls[3]!.args.value).toBe("a");
+  });
+
+  test("forEach with shuffle produces all items (just reordered)", async () => {
+    const items = Array.from({ length: 20 }, (_, i) => i);
+    const routine = makeRoutine({
+      variables: { items },
+      steps: [
+        {
+          name: "loop",
+          forEach: "$items",
+          shuffle: true,
+          as: "item",
+          steps: [
+            { name: "inner", command: "process", args: { value: "$item" } },
+          ],
+        },
+      ],
+    });
+    const { dispatcher, calls } = makeMockDispatcher();
+    await executeRoutine(routine, {}, dispatcher);
+
+    expect(calls.length).toBe(20);
+    const values = calls.map(c => c.args.value as number).sort((a, b) => a - b);
+    expect(values).toEqual(items);
+  });
+
+  test("range with reverse iterates high to low", async () => {
+    const routine = makeRoutine({
+      steps: [
+        {
+          name: "loop",
+          range: [1, 5] as [number, number],
+          reverse: true,
+          as: "n",
+          steps: [
+            { name: "inner", command: "process", args: { num: "$n" } },
+          ],
+        },
+      ],
+    });
+    const { dispatcher, calls } = makeMockDispatcher();
+    await executeRoutine(routine, {}, dispatcher);
+
+    expect(calls.length).toBe(5);
+    expect(calls[0]!.args.num).toBe(5);
+    expect(calls[1]!.args.num).toBe(4);
+    expect(calls[2]!.args.num).toBe(3);
+    expect(calls[3]!.args.num).toBe(2);
+    expect(calls[4]!.args.num).toBe(1);
+  });
+
+  test("range with shuffle produces all numbers (just reordered)", async () => {
+    const routine = makeRoutine({
+      steps: [
+        {
+          name: "loop",
+          range: [1, 10] as [number, number],
+          shuffle: true,
+          as: "n",
+          steps: [
+            { name: "inner", command: "process", args: { num: "$n" } },
+          ],
+        },
+      ],
+    });
+    const { dispatcher, calls } = makeMockDispatcher();
+    await executeRoutine(routine, {}, dispatcher);
+
+    expect(calls.length).toBe(10);
+    const nums = calls.map(c => c.args.num as number).sort((a, b) => a - b);
+    expect(nums).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  });
+
+  test("$_random_hex_color produces valid colors in routine steps", async () => {
+    const routine = makeRoutine({
+      steps: [
+        {
+          name: "loop",
+          range: [1, 5] as [number, number],
+          steps: [
+            { name: "inner", command: "colorize", args: { color: "$_random_hex_color" } },
+          ],
+        },
+      ],
+    });
+    const { dispatcher, calls } = makeMockDispatcher();
+    await executeRoutine(routine, {}, dispatcher);
+
+    expect(calls.length).toBe(5);
+    for (const call of calls) {
+      const color = call.args.color as string;
+      expect(color).toMatch(/^#[0-9a-f]{6}$/);
+    }
+  });
+
+  test("$_random_distinct_from produces no repeats within a forEach", async () => {
+    const routine = makeRoutine({
+      variables: { items: [1, 2, 3] },
+      steps: [
+        {
+          name: "loop",
+          forEach: "$items",
+          as: "item",
+          steps: [
+            {
+              name: "inner",
+              command: "assign",
+              args: { value: "$_random_distinct_from(x,y,z)" },
+            },
+          ],
+        },
+      ],
+    });
+    const { dispatcher, calls } = makeMockDispatcher();
+    await executeRoutine(routine, {}, dispatcher);
+
+    expect(calls.length).toBe(3);
+    const values = calls.map(c => c.args.value as string).sort();
+    expect(values).toEqual(["x", "y", "z"]);
+  });
+
   test("$_timestamp resolved in default variables", async () => {
     const routine = makeRoutine({
       variables: { label: "run-$_timestamp" },
