@@ -39,7 +39,7 @@ export function getToolDefinitions(): ToolDefinition[] {
                     command: {
                         type: 'string',
                         description:
-              'The CLI command path, e.g. "matters list" or "admin users create"',
+              'The CLI command path, e.g. "todos list" or "admin users create"',
                     },
                     args: {
                         type: 'object',
@@ -49,6 +49,37 @@ export function getToolDefinitions(): ToolDefinition[] {
                     },
                 },
                 required: ['command'],
+            },
+        },
+        {
+            name: 'run_commands',
+            description:
+        'Run multiple CLI commands sequentially in a single call. Each command runs after the previous one completes. '
+        + 'Use this for batch operations like creating many resources. Returns all results.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    commands: {
+                        type: 'array',
+                        description: 'Array of commands to run sequentially',
+                        items: {
+                            type: 'object',
+                            properties: {
+                                command: {
+                                    type: 'string',
+                                    description: 'The CLI command path',
+                                },
+                                args: {
+                                    type: 'object',
+                                    description: 'Optional flag arguments as key-value pairs',
+                                    additionalProperties: { type: 'string' },
+                                },
+                            },
+                            required: ['command'],
+                        },
+                    },
+                },
+                required: ['commands'],
             },
         },
         {
@@ -113,9 +144,25 @@ export function getToolDefinitions(): ToolDefinition[] {
                     filter: {
                         type: 'string',
                         description:
-              'Optional prefix to filter commands, e.g. "admin" or "matters"',
+              'Optional prefix to filter commands, e.g. "admin" or "todos"',
                     },
                 },
+            },
+        },
+        {
+            name: 'describe_command',
+            description:
+        'Get the full argument schema for a specific command, including path params, query params, '
+        + 'and request body fields with types and descriptions.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    command: {
+                        type: 'string',
+                        description: 'The command path, e.g. "todos create" or "admin users list"',
+                    },
+                },
+                required: ['command'],
             },
         },
         {
@@ -124,6 +171,25 @@ export function getToolDefinitions(): ToolDefinition[] {
             inputSchema: {
                 type: 'object',
                 properties: {},
+            },
+        },
+        {
+            name: 'create_routine',
+            description:
+        'Create or overwrite a routine YAML file. The routine can then be run with run_routine.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    name: {
+                        type: 'string',
+                        description: 'Routine name (used as filename, e.g. "create-todos" → create-todos.yaml)',
+                    },
+                    content: {
+                        type: 'string',
+                        description: 'The full YAML content for the routine',
+                    },
+                },
+                required: ['name', 'content'],
             },
         },
         {
@@ -138,10 +204,20 @@ export function getToolDefinitions(): ToolDefinition[] {
         {
             name: 'get_spec',
             description:
-        'Get a summary of the generated API types including interface and type counts.',
+        'Get API type information. Without args: lists type names. With verbose=true: full type definitions. '
+        + 'With command="<name>": shows that command\'s argument signature as a routine step template.',
             inputSchema: {
                 type: 'object',
-                properties: {},
+                properties: {
+                    command: {
+                        type: 'string',
+                        description: 'Show the argument signature for a specific command, e.g. "todos create"',
+                    },
+                    verbose: {
+                        type: 'boolean',
+                        description: 'Return full type definitions instead of just type names',
+                    },
+                },
             },
         },
         {
@@ -249,6 +325,36 @@ export function createHandlers(opts: McpServerOptions) {
                 );
             }
             return textResult(stdout);
+        },
+
+        run_commands: async (input: {
+            commands: Array<{ command: string; args?: Record<string, string> }>;
+        }): Promise<ToolResult> => {
+            const results: string[] = [];
+            let failures = 0;
+            for (let i = 0; i < input.commands.length; i++) {
+                const cmd = input.commands[i];
+                const cmdParts = cmd.command.split(/\s+/);
+                const flagArgs = Object.entries(cmd.args || {}).flatMap(([k, v]) => [
+                    k,
+                    String(v),
+                ]);
+                const { stdout, stderr, exitCode } = await runCli(opts.cliInvocation, [
+                    ...cmdParts,
+                    ...flagArgs,
+                ], opts.projectRoot ?? undefined);
+                if (exitCode !== 0) {
+                    failures++;
+                    results.push(`[${i + 1}/${input.commands.length}] FAIL: ${cmd.command}\n${stderr || stdout}`);
+                } else {
+                    results.push(`[${i + 1}/${input.commands.length}] OK: ${cmd.command}${stdout ? '\n' + stdout.trim() : ''}`);
+                }
+            }
+            const summary = `Completed ${input.commands.length} commands (${failures} failed)`;
+            return textResult(
+                summary + '\n\n' + results.join('\n\n'),
+                failures > 0,
+            );
         },
 
         run_routine: async (input: {
@@ -363,7 +469,33 @@ export function createHandlers(opts: McpServerOptions) {
                 return textResult(lines.join('\n'));
             } catch {
                 return textResult(
-                    'Command map not available. Run generate first.',
+                    `Command map not available. Run generate first.\n`
+                    + `Looked in: ${getGeneratedDir()}/command-map.ts`,
+                    true,
+                );
+            }
+        },
+
+        describe_command: async (input: {
+            command: string;
+        }): Promise<ToolResult> => {
+            try {
+                const mapPath = resolve(getGeneratedDir(), 'command-map');
+                const mapModule = await import(mapPath);
+                const commandMap = mapModule.commandMap as Record<string, Record<string, unknown>>;
+                const info = commandMap[input.command];
+                if (!info) {
+                    const available = Object.keys(commandMap).join(', ');
+                    return textResult(
+                        `Command "${input.command}" not found. Available commands: ${available}`,
+                        true,
+                    );
+                }
+                return textResult(JSON.stringify(info, null, 2));
+            } catch {
+                return textResult(
+                    `Command map not available. Run generate first.\n`
+                    + `Looked in: ${getGeneratedDir()}/command-map.ts`,
                     true,
                 );
             }
@@ -372,10 +504,31 @@ export function createHandlers(opts: McpServerOptions) {
         list_routines: async (): Promise<ToolResult> => {
             const routines = listRoutinesStructured(opts.routinesDir);
             if (routines.length === 0) {
-                return textResult('No routines found.');
+                return textResult(
+                    `No routines found in ${opts.routinesDir}/.\n`
+                    + 'Create a routine with the create_routine tool or place a YAML file in that directory.',
+                );
             }
             const lines = routines.map(r => r.name);
             return textResult(lines.join('\n'));
+        },
+
+        create_routine: async (input: {
+            name: string;
+            content: string;
+        }): Promise<ToolResult> => {
+            try {
+                mkdirSync(opts.routinesDir, { recursive: true });
+                const filename = input.name.endsWith('.yaml') ? input.name : `${input.name}.yaml`;
+                const filePath = join(opts.routinesDir, filename);
+                writeFileSync(filePath, input.content);
+                return textResult(`Routine saved to ${filePath}`);
+            } catch (err) {
+                return textResult(
+                    `Failed to create routine: ${err instanceof Error ? err.message : String(err)}`,
+                    true,
+                );
+            }
         },
 
         get_config: async (): Promise<ToolResult> => {
@@ -388,31 +541,52 @@ export function createHandlers(opts: McpServerOptions) {
             return textResult(JSON.stringify(safe, null, 2));
         },
 
-        get_spec: async (): Promise<ToolResult> => {
+        get_spec: async (input: {
+            command?: string;
+            verbose?: boolean;
+        }): Promise<ToolResult> => {
+            // If a command is specified, run it with -o routine-step to show its signature
+            if (input.command) {
+                const cmdParts = input.command.split(/\s+/);
+                const { stdout, stderr, exitCode } = await runCli(opts.cliInvocation, [
+                    ...cmdParts,
+                    '-o', 'routine-step',
+                ], opts.projectRoot ?? undefined);
+                if (exitCode !== 0) {
+                    return textResult(
+                        `Failed to describe "${input.command}":\n${stderr || stdout}`,
+                        true,
+                    );
+                }
+                return textResult(stdout);
+            }
+
             try {
                 const typesPath = resolve(getGeneratedDir(), 'types.ts');
                 const content = readFileSync(typesPath, 'utf-8');
 
-                const interfaceMatches = content.match(/^export interface /gm);
-                const typeMatches = content.match(/^export type /gm);
-                const interfaceCount = interfaceMatches ? interfaceMatches.length : 0;
-                const typeCount = typeMatches ? typeMatches.length : 0;
+                if (input.verbose) {
+                    return textResult(content);
+                }
+
+                // Default: return a compact summary with type names and their fields
+                const blocks: string[] = [];
+                const typeRegex = /^export (?:interface|type) (\w+)/gm;
+                let match;
+                while ((match = typeRegex.exec(content)) !== null) {
+                    blocks.push(match[1]);
+                }
 
                 return textResult(
-                    JSON.stringify(
-                        {
-                            file: typesPath,
-                            interfaces: interfaceCount,
-                            types: typeCount,
-                            totalLines: content.split('\n').length,
-                        },
-                        null,
-                        2,
-                    ),
+                    `Types defined in ${typesPath}:\n`
+                    + blocks.join(', ')
+                    + `\n\nUse get_spec with verbose=true to see full definitions, `
+                    + `or get_spec with command="<command>" to see a specific command's signature.`,
                 );
             } catch {
                 return textResult(
-                    'Types file not available. Run generate first.',
+                    `Types file not available. Run generate first.\n`
+                    + `Looked in: ${getGeneratedDir()}/types.ts`,
                     true,
                 );
             }

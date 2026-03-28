@@ -22,8 +22,8 @@ function makeOpts(overrides: Partial<McpServerOptions> = {}): McpServerOptions {
 describe("getToolDefinitions()", () => {
   const tools = getToolDefinitions();
 
-  test("returns exactly 10 tool definitions", () => {
-    expect(tools).toHaveLength(10);
+  test("returns exactly 13 tool definitions", () => {
+    expect(tools).toHaveLength(13);
   });
 
   test("all tools have required fields", () => {
@@ -42,12 +42,15 @@ describe("getToolDefinitions()", () => {
     expect(names).toEqual([
       "config_list",
       "config_switch",
+      "create_routine",
+      "describe_command",
       "generate",
       "get_config",
       "get_spec",
       "list_commands",
       "list_routines",
       "run_command",
+      "run_commands",
       "run_routine",
       "setup",
     ]);
@@ -80,7 +83,7 @@ describe("getToolDefinitions()", () => {
   });
 
   test("parameterless tools have empty properties", () => {
-    const parameterless = ["generate", "config_list", "list_routines", "get_config", "get_spec"];
+    const parameterless = ["generate", "config_list", "list_routines", "get_config"];
     for (const name of parameterless) {
       const tool = tools.find((t) => t.name === name)!;
       expect(Object.keys(tool.inputSchema.properties)).toHaveLength(0);
@@ -171,7 +174,7 @@ describe("list_routines handler", () => {
     const handlers = createHandlers(opts);
     const result = await handlers.list_routines();
 
-    expect(result.content[0].text).toBe("No routines found.");
+    expect(result.content[0].text).toContain("No routines found");
   });
 });
 
@@ -558,19 +561,28 @@ describe("get_spec handler", () => {
 
     const opts = makeOpts({ generatedDir: specDir });
     const handlers = createHandlers(opts);
-    const result = await handlers.get_spec();
+    const result = await handlers.get_spec({});
 
     expect(result.isError).toBeUndefined();
-    const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.interfaces).toBe(3);
-    expect(parsed.types).toBe(2);
-    expect(parsed.totalLines).toBeGreaterThanOrEqual(15);
+    expect(result.content[0].text).toContain("UserDto");
+    expect(result.content[0].text).toContain("MatterDto");
+    expect(result.content[0].text).toContain("LoadDto");
+  });
+
+  test("returns full content in verbose mode", async () => {
+    const opts = makeOpts({ generatedDir: import.meta.dir + "/fixtures/mcp/spec" });
+    const handlers = createHandlers(opts);
+    const result = await handlers.get_spec({ verbose: true });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain("export interface UserDto");
+    expect(result.content[0].text).toContain("id: number");
   });
 
   test("returns error when types file not available", async () => {
     const opts = makeOpts({ generatedDir: "/nonexistent/path" });
     const handlers = createHandlers(opts);
-    const result = await handlers.get_spec();
+    const result = await handlers.get_spec({});
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("Types file not available");
