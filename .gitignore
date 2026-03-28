@@ -3,6 +3,7 @@ dist/
 bun.lockb
 .env
 *.local.*
+.apijack/
 
 # Superpowers docs (plans & specs)
 docs/superpowers/
