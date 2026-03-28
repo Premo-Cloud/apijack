@@ -67,14 +67,14 @@ describe("config management", () => {
 
     test("reads config file and returns active environment", async () => {
       await saveEnvironment("myapp", "staging", {
-        url: "https://staging.example.com",
+        url: "http://localhost:9090",
         user: "staginguser",
         password: "stagingpass",
       }, true, { configPath });
 
       const result = resolveAuth("myapp", { configPath });
       expect(result).not.toBeNull();
-      expect(result!.baseUrl).toBe("https://staging.example.com");
+      expect(result!.baseUrl).toBe("http://localhost:9090");
       expect(result!.username).toBe("staginguser");
       expect(result!.password).toBe("stagingpass");
     });
@@ -130,7 +130,7 @@ describe("config management", () => {
       }, true, { configPath });
 
       await saveEnvironment("myapp", "staging", {
-        url: "https://staging.example.com",
+        url: "http://localhost:9091",
         user: "stageuser",
         password: "stagepass",
       }, false, { configPath });
@@ -219,7 +219,7 @@ describe("config management", () => {
       }, true, { configPath });
 
       await saveEnvironment("myapp", "staging", {
-        url: "https://staging.example.com",
+        url: "http://localhost:9091",
         user: "stage",
         password: "pass2",
       }, false, { configPath });

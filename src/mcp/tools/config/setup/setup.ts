@@ -11,7 +11,7 @@ export const setupTool = defineTool({
     name: 'setup',
     description:
         'Configure API credentials for an environment and auto-generate the CLI. '
-        + 'Only works for development URLs (localhost, .local, .dev, .test, .staging, and configured CIDR ranges). '
+        + 'Only works for development URLs (localhost and configured CIDR ranges). '
         + 'For production APIs, use environment variables.',
     schema: {
         name: z.string().describe('Environment name, e.g. "dev" or "staging"'),

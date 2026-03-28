@@ -5,8 +5,6 @@ export interface ClassificationResult {
 
 const SAFE_HOSTNAMES = new Set(['localhost']);
 const SAFE_IPS = new Set(['127.0.0.1', '::1']);
-const SAFE_SUFFIXES = ['.local', '.test'];
-
 export function classifyUrl(
     url: string,
     allowedCidrs?: string[],
@@ -28,18 +26,6 @@ export function classifyUrl(
     }
     if (SAFE_IPS.has(cleanHost)) {
         return { safe: true, reason: cleanHost };
-    }
-
-    // Check safe suffixes
-    for (const suffix of SAFE_SUFFIXES) {
-        if (cleanHost.endsWith(suffix)) {
-            return { safe: true, reason: suffix };
-        }
-    }
-
-    // Check staging in hostname (as subdomain or path segment)
-    if (cleanHost.includes('.staging.') || cleanHost.startsWith('staging.')) {
-        return { safe: true, reason: 'staging' };
     }
 
     // Check CIDR allowlist (only for IP addresses)

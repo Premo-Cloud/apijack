@@ -15,24 +15,24 @@ describe('classifyUrl()', () => {
             expect(classifyUrl('http://[::1]:8080').safe).toBe(true);
         });
 
-        test('.local hostname is safe', () => {
-            expect(classifyUrl('http://myserver.local:8080').safe).toBe(true);
+        test('.local hostname is production', () => {
+            expect(classifyUrl('http://myserver.local:8080').safe).toBe(false);
         });
 
         test('.dev hostname is production (real TLD)', () => {
             expect(classifyUrl('http://api.dev:3000').safe).toBe(false);
         });
 
-        test('.test hostname is safe', () => {
-            expect(classifyUrl('http://api.test').safe).toBe(true);
+        test('.test hostname is production', () => {
+            expect(classifyUrl('http://api.test').safe).toBe(false);
         });
 
-        test('.staging. in hostname is safe', () => {
-            expect(classifyUrl('https://api.staging.example.com').safe).toBe(true);
+        test('.staging. in hostname is production', () => {
+            expect(classifyUrl('https://api.staging.example.com').safe).toBe(false);
         });
 
-        test('staging. at start of hostname is safe', () => {
-            expect(classifyUrl('https://staging.example.com').safe).toBe(true);
+        test('staging. at start of hostname is production', () => {
+            expect(classifyUrl('https://staging.example.com').safe).toBe(false);
         });
 
         test('includes reason for safe classification', () => {
