@@ -1,5 +1,4 @@
 import { describe, test, expect } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'fs';
 import { getSpecTool } from './get-spec';
 import type { McpContext } from '../../../types';
 
@@ -15,32 +14,7 @@ function makeCtx(overrides: Partial<McpContext> = {}): McpContext {
 
 describe('get_spec tool', () => {
     test('counts interfaces and types from types.ts', async () => {
-        const specDir = import.meta.dir + '/fixtures';
-        mkdirSync(specDir, { recursive: true });
-        writeFileSync(
-            specDir + '/types.ts',
-            [
-                '// Auto-generated',
-                'export interface UserDto {',
-                '  id: number;',
-                '  name: string;',
-                '}',
-                '',
-                'export interface MatterDto {',
-                '  id: number;',
-                '}',
-                '',
-                "export type Status = 'active' | 'inactive';",
-                '',
-                "export type Role = 'admin' | 'user';",
-                '',
-                'export interface LoadDto {',
-                '  loadId: number;',
-                '}',
-            ].join('\n'),
-        );
-
-        const ctx = makeCtx({ generatedDir: specDir });
+        const ctx = makeCtx({ generatedDir: import.meta.dir + '/fixtures' });
         const result = await getSpecTool.handler({}, ctx);
 
         expect(result.isError).toBeUndefined();
@@ -50,8 +24,7 @@ describe('get_spec tool', () => {
     });
 
     test('returns full content in verbose mode', async () => {
-        const specDir = import.meta.dir + '/fixtures';
-        const ctx = makeCtx({ generatedDir: specDir });
+        const ctx = makeCtx({ generatedDir: import.meta.dir + '/fixtures' });
         const result = await getSpecTool.handler({ verbose: true }, ctx);
 
         expect(result.isError).toBeUndefined();
