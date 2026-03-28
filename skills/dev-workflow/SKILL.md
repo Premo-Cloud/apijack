@@ -54,82 +54,50 @@ Repeat until code review is satisfactory:
 - Check for: correctness, consistency, test coverage, backwards compatibility
 - If issues found, go back to 2b
 
-## Phase 3: Ship
+## Phases 3–7: Ship
 
-Once review passes, run the ship script:
+Once review passes, commit your changes and run the ship script:
 
 ```bash
 # Stage and commit
 git add <changed files>
 git commit -m "<conventional commit message>"
 
-# Push dev
-git push -u origin dev
-
-# Create PR (or update existing)
-gh pr create --base main --head dev \
-  --title "<title>" \
-  --body "<body>"
-# If PR already exists, this is a no-op — the push updated it
+# Ship it
+./scripts/ship.sh
 ```
 
-### Wait for CI
+The script automates the entire pipeline:
+
+1. **Push** dev to origin
+2. **Create PR** (or find existing one) to main
+3. **Wait for CI** (Tests + E2E workflows) — exits with instructions if checks fail
+4. **Merge** the PR
+5. **Wait for publish** workflow — exits with instructions if publish fails
+6. **Cleanup** — pulls version bump, rebases dev onto main
+
+### If the script exits with a failure
+
+The script tells you what failed and what to do. The general pattern:
+
+1. Fix the issue on the dev branch
+2. Run `bun test` and `bun run lint` locally to confirm
+3. Commit the fix
+4. Re-run `./scripts/ship.sh` — it picks up where it left off (finds existing PR, etc.)
+
+### What the CI checks
 
 Two workflows run on PRs to `main`:
 - **Tests** (ci.yml): `bun test`
 - **E2E** (e2e.yml): codegen against petstore, edge-cases, OAS 3.1 fixtures
 
-Check status:
-```bash
-gh pr checks <pr-number> --watch
-```
+### What publish does
 
-**If CI fails:**
-1. Read the failure: `gh run view <run-id> --log-failed`
-2. Fix the issue locally
-3. Run `bun test` and `bun run lint` to confirm
-4. Commit the fix, push to dev — CI reruns automatically
-5. Repeat until green
-
-**If CI passes:**
-Merge the PR:
-```bash
-gh pr merge <pr-number> --merge
-```
-
-## Phase 4: Post-Merge
-
-After merging to `main`, the **Publish** workflow runs automatically:
+After merge to `main`, the **Publish** workflow:
 - Runs tests + lint + build
 - Determines version bump from commit messages (feat = minor, fix = patch, BREAKING CHANGE = major)
-- Bumps version in package.json, creates git tag
-- Publishes to npm
+- Bumps version, creates git tag, publishes to npm
 - Pushes version bump commit back to main
-
-### Wait for Publish
-
-```bash
-# Watch the publish workflow
-gh run list --branch main --limit 1 --workflow publish.yml
-gh run view <run-id> --watch
-```
-
-**If publish fails:**
-1. Read the failure: `gh run view <run-id> --log-failed`
-2. Switch back to dev: `git checkout dev && git pull origin main --rebase`
-3. Fix the issue, commit, push
-4. Create a new PR, merge again
-5. Repeat until publish succeeds
-
-**If publish passes:**
-```bash
-# Pull the version bump commit + tag
-git checkout main && git pull
-# Clean up dev
-git checkout dev && git rebase main
-```
-
-The update check interval is 5 minutes (beta), so the new version will be prompted on next CLI run.
 
 ## Commit Message Convention
 
