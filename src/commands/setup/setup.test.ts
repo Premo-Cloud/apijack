@@ -1,5 +1,20 @@
 import { describe, test, expect, mock } from 'bun:test';
-import { setupAction } from './setup';
+import { setupAction, setupUrlDefault, DEFAULT_SETUP_URL } from './setup';
+
+describe('setupUrlDefault', () => {
+    test('falls back to localhost:8080 when no defaultUrl is configured', () => {
+        expect(setupUrlDefault(undefined)).toBe('http://localhost:8080');
+        expect(DEFAULT_SETUP_URL).toBe('http://localhost:8080');
+    });
+
+    test('uses the consumer-configured defaultUrl', () => {
+        expect(setupUrlDefault('http://localhost:7080')).toBe('http://localhost:7080');
+    });
+
+    test('ignores an empty defaultUrl', () => {
+        expect(setupUrlDefault('')).toBe('http://localhost:8080');
+    });
+});
 
 describe('setupAction', () => {
     test('calls saveEnvironment with provided credentials', async () => {

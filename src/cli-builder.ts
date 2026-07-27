@@ -21,7 +21,7 @@ import { registerPluginsCommand } from './commands/plugins/register';
 import { PluginRegistry } from './plugin/registry';
 import { loadPluginPeerInfo, checkPeerRange } from './plugin/peer-version';
 import { PluginPeerMismatchError } from './plugin/errors';
-import { registerSetupCommand, setupAction } from './commands/setup/setup';
+import { registerSetupCommand, setupAction, setupUrlDefault } from './commands/setup/setup';
 import { registerConfigCommand } from './commands/config/register';
 import { registerGenerateCommand } from './commands/generate/generate';
 import { registerUpgradeCommand } from './commands/upgrade/upgrade';
@@ -466,6 +466,7 @@ export function createCli(options: CliOptions): Cli {
                 allowedCidrs: options.allowedCidrs,
                 configPath: options.configPath,
                 displayName,
+                defaultUrl: options.defaultUrl,
             });
             registerConfigCommand(program, cliName, {
                 configPath: options.configPath,
@@ -511,7 +512,8 @@ export function createCli(options: CliOptions): Cli {
             ) {
                 console.log(`${displayName} Setup\n`);
                 const envName = await prompt('Environment name [default]: ', 'default');
-                const url = await prompt('URL [http://localhost:8080]: ', 'http://localhost:8080');
+                const urlDefault = setupUrlDefault(options.defaultUrl);
+                const url = await prompt(`URL [${urlDefault}]: `, urlDefault);
                 const user = await prompt('Username/Email: ');
                 const password = await hiddenPrompt('Password: ');
 
