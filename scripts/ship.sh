@@ -22,6 +22,16 @@ ok()    { echo -e "${GREEN}✓${NC} $1"; }
 fail()  { echo -e "${RED}✗${NC} $1"; }
 warn()  { echo -e "${YELLOW}!${NC} $1"; }
 
+# Promote issues closed by the release PR to `deployed`. Called from both the
+# published and the no-publish-needed paths — the PR is merged to main by the
+# time either runs. Never aborts: the release has already landed, so a
+# labelling hiccup must not leave the caller thinking the ship failed.
+promote_issues() {
+    info "Promoting shipped issues..."
+    "$(git rev-parse --show-toplevel)/scripts/promote-shipped-issues.sh" "$PR_NUM" \
+        || warn "Could not promote issue labels — release has landed; label by hand."
+}
+
 # ── Preflight ───────────────────────────────────────────────────────
 
 BRANCH=$(git branch --show-current)
@@ -227,6 +237,7 @@ done
 if [ -z "$PUBLISH_RUN" ] || [ "$PUBLISH_RUN" = "null" ]; then
     warn "Could not find publish workflow run."
     warn "The merge commit may have been the version bump (skipped by CI)."
+    promote_issues
     info "Pulling main..."
     git checkout main --quiet && git pull --quiet
     git checkout dev --quiet && git rebase main --quiet
@@ -247,7 +258,11 @@ gh run watch "$PUBLISH_RUN" --exit-status 2>/dev/null || {
 
 ok "Published to npm"
 
-# ── Step 8: Cleanup ────────────────────────────────────────────────
+# ── Step 8: Promote shipped issues ─────────────────────────────────
+
+promote_issues
+
+# ── Step 9: Cleanup ────────────────────────────────────────────────
 
 info "Syncing branches..."
 git checkout main --quiet && git pull --quiet
