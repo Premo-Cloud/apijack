@@ -152,6 +152,7 @@ const cli = createCli({
     sessionAuth,
     generatedDir,
     allowedCidrs: projectConfig?.allowedCidrs,
+    defaultUrl: projectConfig?.defaultUrl,
     configPath: join(configDir, 'config.json'),
     customCommandDefaults: projectSettings.customCommands?.defaults,
 });

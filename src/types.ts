@@ -38,6 +38,10 @@ export interface CliOptions {
     allowedCidrs?: string[];
     configPath?: string;
     customCommandDefaults?: { requiresAuth?: boolean };
+    /** URL pre-filled in the interactive setup prompts. Defaults to `http://localhost:8080`.
+     *  Prompt default only — it does not participate in the NAME_URL / saved-config
+     *  resolution chain used for non-interactive runs. */
+    defaultUrl?: string;
 }
 
 export type CommandRegistrar<R extends boolean = false> = R extends true
