@@ -121,7 +121,8 @@ The script edits the open `dev → main` PR if one exists, otherwise pushes `dev
 3. Wait for CI
 4. Merge via `gh pr merge --merge --admin`
 5. Watch the publish workflow create the release + publish to npm
-6. Sync main and rebase dev
+6. Promote every issue closed by the release to `deployed`, stripping the now-stale `ready-for-implement` and `merged to dev` (via `scripts/promote-shipped-issues.sh`, driven by the `Closes #N` lines in the PR body)
+7. Sync main and rebase dev
 
 If ship.sh exits non-zero, leave the PR in place for a human and stop.
 

@@ -148,7 +148,10 @@ ship.sh will:
 3. Wait for CI
 4. Merge via `gh pr merge --merge --admin`
 5. Watch the publish workflow
-6. Sync main and rebase dev
+6. Promote every issue closed by the release to `deployed`, stripping the now-stale `ready-for-implement` and `merged to dev` (via `scripts/promote-shipped-issues.sh`, driven by the `Closes #N` lines from step 2)
+7. Sync main and rebase dev
+
+Step 6 is why the `Closes #N` lines matter twice over: they auto-close the issues *and* drive the label promotion. A release that closes no issues is a clean no-op. Labelling never aborts a ship — the release is already published by then, so a failure only warns.
 
 If ship.sh fails at any step, it prints what to do. Fix on dev, commit, re-run — it picks up where it left off.
 
