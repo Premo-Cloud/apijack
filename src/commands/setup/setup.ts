@@ -3,6 +3,14 @@ import { saveEnvironment, verifyCredentials } from '../../config';
 import type { EnvironmentConfig } from '../../config';
 import { prompt, hiddenPrompt } from '../../prompt';
 
+/** URL offered by the interactive setup prompts when a consumer configures none. */
+export const DEFAULT_SETUP_URL = 'http://localhost:8080';
+
+/** Resolve the URL pre-fill for the setup prompts — the consumer's `defaultUrl`, else the built-in default. */
+export function setupUrlDefault(defaultUrl?: string): string {
+    return defaultUrl || DEFAULT_SETUP_URL;
+}
+
 export interface SetupInput {
     cliName: string;
     envName: string;
@@ -44,14 +52,17 @@ export function registerSetupCommand(
         configPath?: string;
         /** Display name for user-facing output. Defaults to cliName. */
         displayName?: string;
+        /** URL pre-filled in the setup prompt. Defaults to `DEFAULT_SETUP_URL`. */
+        defaultUrl?: string;
     },
 ): void {
     const displayName = opts?.displayName ?? cliName;
+    const urlDefault = setupUrlDefault(opts?.defaultUrl);
     const action = async (cmdOpts: { allowInsecureStorage?: boolean }) => {
         console.log(`${displayName} Setup\n`);
 
         const envName = await prompt('Environment name [default]: ', 'default');
-        const url = await prompt('URL [http://localhost:8080]: ', 'http://localhost:8080');
+        const url = await prompt(`URL [${urlDefault}]: `, urlDefault);
         const user = await prompt('Username/Email: ');
         const password = await hiddenPrompt('Password: ');
 

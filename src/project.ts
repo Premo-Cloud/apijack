@@ -10,6 +10,8 @@ export interface ProjectConfig {
     generatedDir?: string;
     auth?: string;
     allowedCidrs?: string[];
+    /** URL pre-filled in the interactive setup prompts. Defaults to `http://localhost:8080`. */
+    defaultUrl?: string;
 }
 
 export function findProjectConfig(startDir: string): string | null {
