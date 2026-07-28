@@ -28,9 +28,9 @@
 #   - indented code blocks and blockquotes are not stripped (per #129: a
 #     blockquote can legitimately carry a real reference)
 #   - a fence indented 4+ spaces is not recognized, so a fence nested inside a
-#     list item leaks its contents. Allowing any indent would be worse: an
-#     indented-code-block fence marker would open a phantom fence and swallow
-#     every real reference after it.
+#     list item leaks its contents (#134). Allowing any indent would be worse:
+#     an indented-code-block fence marker would open a phantom fence and
+#     swallow every real reference after it.
 #   - code spans are scanned per line, so a span that wraps across a newline
 #     leaks its contents
 #

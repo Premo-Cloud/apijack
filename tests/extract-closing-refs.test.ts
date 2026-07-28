@@ -149,9 +149,9 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
         // in scripts/extract-closing-refs.sh.
 
         test('a fence indented 4+ spaces is not recognized', async () => {
-            // Legitimate inside a nested list item. Permitting any indent would be
-            // worse: an indented-code-block fence marker would open a phantom
-            // fence and swallow every real reference after it.
+            // Legitimate inside a nested list item. Tracked as #134. Permitting any
+            // indent would be worse: an indented-code-block fence marker would open
+            // a phantom fence and swallow every real reference after it.
             const { issues } = await extract('Closes #7\n\n- outer\n  - inner\n    ```\n    Closes #100\n    ```\n');
             expect(issues).toEqual(['7', '100']);
         });
