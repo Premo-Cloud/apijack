@@ -57,7 +57,7 @@ resolve_merge_sha() {
 # merge commit maps back to the dev → main release PR.
 tag_and_publish() {
     local sha="$1" version="$2"
-    local tag="v$2"
+    local tag="v$version"
     local existing run attempt
 
     # The merge commit is created server-side — fetch before tagging it.
@@ -153,7 +153,6 @@ resume_untagged_release() {
     warn "A previous ship merged PR #$merged_pr without tagging it — finishing that release."
 
     PR_NUM="$merged_pr"
-    NEW_VERSION="$main_version"
     resolve_merge_sha "$PR_NUM"
     tag_and_publish "$MERGE_SHA" "$main_version"
     promote_issues
@@ -178,12 +177,16 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
+# Finish any half-finished ship before evaluating new work. This runs ahead of
+# the COMMITS check for two reasons: it refreshes origin/main (nothing else
+# does until tag_and_publish, so a run that died earlier would leave the ref
+# stale and COMMITS wrongly non-zero), and a stranded untagged release must be
+# recoverable even once dev has moved on. Exits 0 if it resumes; returns
+# silently when nothing is stuck.
+resume_untagged_release
+
 COMMITS=$(git log origin/main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
 if [ "$COMMITS" = "0" ]; then
-    # Nothing ahead of main is also what a half-finished ship looks like:
-    # merged and bumped, but never tagged and so never published. Finish that
-    # before declaring there is nothing to do. Exits 0 if it resumes.
-    resume_untagged_release
     fail "No commits ahead of main. Nothing to ship."
     exit 1
 fi

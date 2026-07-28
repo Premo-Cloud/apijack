@@ -154,7 +154,7 @@ ship.sh will:
 
 Step 7 is why the `Closes #N` lines matter twice over: they auto-close the issues *and* drive the label promotion. A release that closes no issues is a clean no-op. Labelling never aborts a ship — the release is already published by then, so a failure only warns.
 
-If ship.sh fails at any step, it prints what to do. Fix on dev, commit, re-run — it picks up where it left off. That includes the post-merge window: if a run dies after merging but before the tag is pushed, main is bumped but nothing is published, and a plain re-run detects the untagged release and finishes it.
+If ship.sh fails at any step, it prints what to do. Fix on dev, commit, re-run — it picks up where it left off. That includes the post-merge window: if a run dies after merging but before the tag is pushed, main is bumped but nothing is published. Preflight checks for that state on every run — main's version having no matching tag, with a merged dev → main PR behind it — and finishes the release before considering new work.
 
 ## Red Flags
 

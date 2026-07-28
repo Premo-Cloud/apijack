@@ -60,6 +60,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
+
+          # The tag is now the input that armed this run, so it is a second
+          # source of truth alongside package.json. ship.sh keeps them in step;
+          # a hand-pushed tag might not, and a mismatch would create a stray
+          # second tag here and then collide in npm publish. Fail loudly first.
+          if [ "${{ github.ref_name }}" != "v$VERSION" ]; then
+              echo "::error::Tag ${{ github.ref_name }} does not match package.json version $VERSION"
+              exit 1
+          fi
+
           BODY_FILE=$(mktemp)
 
           # github.sha is the commit the tag points at — the merge commit on
