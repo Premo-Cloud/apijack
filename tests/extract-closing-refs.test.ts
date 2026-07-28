@@ -41,7 +41,12 @@ async function extractFile(path: string): Promise<ExtractResult> {
     return { issues: stdout.split('\n').filter(Boolean), exitCode, stderr };
 }
 
-describe('extract-closing-refs.sh', () => {
+// `bun test` runs on windows-latest in CI, where Bun can't exec a .sh directly
+// (ENOENT). The scripts under test are release automation — they run from a
+// maintainer's shell and from Linux CI, never on Windows. Invoking them through
+// Git Bash instead would test a configuration nobody uses, and would lean on
+// MSYS's awk and coreutils rather than the ones these scripts actually run under.
+describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
     describe('genuine references', () => {
         test('matches every closing keyword form GitHub honors', async () => {
             const body = [
