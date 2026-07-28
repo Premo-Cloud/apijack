@@ -19,7 +19,10 @@
 
 set -euo pipefail
 
-source "$(git rev-parse --show-toplevel)/scripts/gh-pin-account.sh"
+repo_root="$(git rev-parse --show-toplevel)"
+source "$repo_root/scripts/gh-pin-account.sh"
+
+extract="$repo_root/scripts/extract-closing-refs.sh"
 
 pr="${1:?pr number required}"
 repo="normalled/apijack"
@@ -27,15 +30,16 @@ label="merged to dev"
 
 body=$(gh api "repos/$repo/pulls/$pr" --jq '.body // ""')
 
-# Match GitHub's recognized closing keywords:
-#   close / closes / closed
-#   fix / fixes / fixed
-#   resolve / resolves / resolved
-# followed by whitespace, `#`, and a number. Case-insensitive on the keyword.
-issues=$(printf '%s\n' "$body" \
-    | grep -oiE '\b(close[sd]?|fix(es|ed)?|resolve[sd]?)[[:space:]]+#[0-9]+' \
-    | grep -oE '[0-9]+' \
-    | sort -un)
+# Keyword matching lives in scripts/extract-closing-refs.sh, shared with
+# promote-shipped-issues.sh and collect-closes-refs.sh. It strips fenced code
+# blocks and inline code spans first, so a body that merely documents the
+# `Closes #N` convention doesn't get read as a reference — the failure that
+# labeled five unrelated PRs during #126.
+#
+# It exits 0 with no output when there are no references, which keeps the
+# friendly branch below reachable under `set -euo pipefail` (#127) — and
+# non-zero on an internal failure, which aborts here rather than labeling nothing.
+issues=$(printf '%s\n' "$body" | "$extract" -)
 
 if [ -z "$issues" ]; then
     echo "label-merged-issues: no closing references in PR #$pr body; nothing to label."

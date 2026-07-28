@@ -31,23 +31,20 @@ repo="normalled/apijack"
 add_label="deployed"
 strip_labels=("ready-for-implement" "merged to dev")
 
+extract="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/extract-closing-refs.sh"
+
 body=$(gh api "repos/$repo/pulls/$pr" --jq '.body // ""')
 
-# Match GitHub's recognized closing keywords:
-#   close / closes / closed
-#   fix / fixes / fixed
-#   resolve / resolves / resolved
-# followed by whitespace, `#`, and a number. Case-insensitive on the keyword.
-# The leading `\b` matters: without it, "discloses #15" would match and this
-# script would strip `ready-for-implement` off an unrelated open issue.
+# Keyword matching lives in scripts/extract-closing-refs.sh, shared with
+# label-merged-issues.sh and collect-closes-refs.sh. It strips fenced code
+# blocks and inline code spans first — which matters most here, because this
+# script doesn't only add a label, it strips `ready-for-implement`. A spurious
+# match silently destroys the triage state of an open, unshipped issue.
 #
-# `|| true` is load-bearing under `set -euo pipefail`: grep exits 1 when nothing
-# matches, which would abort the script on the legitimate no-closing-refs case
-# before the friendly message below could run.
-issues=$(printf '%s\n' "$body" \
-    | grep -oiE '\b(close[sd]?|fix(es|ed)?|resolve[sd]?)[[:space:]]+#[0-9]+' \
-    | grep -oE '[0-9]+' \
-    | sort -un || true)
+# It exits 0 with no output when there are no references, so the friendly
+# branch below stays reachable under `set -euo pipefail` — and non-zero on an
+# internal failure, which aborts here rather than silently promoting nothing.
+issues=$(printf '%s\n' "$body" | "$extract" -)
 
 if [ -z "$issues" ]; then
     echo "promote-shipped-issues: no closing references in PR #$pr body; nothing to promote."
