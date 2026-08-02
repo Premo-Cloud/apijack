@@ -30,14 +30,39 @@ fi
 # no referenced PRs is a legitimate empty-output case, not a failure.
 PR_NUMS=$(grep -oE '#[0-9]+' "$COMMITS_FILE" | sed 's/#//' | sort -un || true)
 
+# Resolved relative to this script rather than via `git rev-parse`, so the
+# default /tmp commits-file usage still works from outside a checkout.
+EXTRACT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/extract-closing-refs.sh"
+
+# The extractor runs inside a process substitution below, whose exit status is
+# never examined, inside a loop that `continue`s freely — so unlike the other
+# two call sites, a missing or broken extractor here would fail SILENTLY and
+# yield an empty ref list. That is indistinguishable from a chore-only release,
+# and the release PR body would ship with no `Closes #N` lines at all, leaving
+# every issue in the release to never auto-close. Fail loudly instead.
+if [ ! -x "$EXTRACT" ]; then
+    echo "collect-closes-refs: extractor missing or not executable: $EXTRACT" >&2
+    exit 1
+fi
+
 declare -A SEEN
 for pr in $PR_NUMS; do
     BODY=$(gh pr view "$pr" --json body --jq '.body' 2>/dev/null) || continue
     [ -z "$BODY" ] && continue
+    # Shared with label-merged-issues.sh and promote-shipped-issues.sh. This
+    # call site is the upstream vector for #129: whatever it pulls out of an
+    # issue PR body gets written into the release PR body as `Closes #N`, which
+    # promote-shipped-issues.sh then acts on. A keyword quoted in a fenced
+    # example here becomes a real label mutation two steps later.
+    #
+    # Adopting the shared implementation also settles the drift this script had
+    # against the other two: it previously matched only Closes/Fixes/Resolves
+    # (missing the bare `close`/`fixed`/`resolved` forms GitHub honors) and
+    # lacked the leading `\b` that rejects `Discloses #15`.
     while IFS= read -r num; do
         [ -z "$num" ] && continue
         SEEN["$num"]=1
-    done < <(echo "$BODY" | grep -ioE '(Closes|Fixes|Resolves)[[:space:]]+#[0-9]+' | grep -oE '[0-9]+' || true)
+    done < <(printf '%s\n' "$BODY" | "$EXTRACT" -)
 done
 
 for num in "${!SEEN[@]}"; do
