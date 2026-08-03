@@ -263,9 +263,14 @@ describe('rewriteArgv()', () => {
         expect(result.errors).toEqual([]);
     });
 
+    // Pre-codegen, only built-in commands are registered — no "customers *"
+    // paths exist yet. Used by the two tests below so they reflect the actual
+    // state under test, rather than reusing the post-codegen `realPaths`.
+    const builtinPaths = new Set(['generate', 'config', 'config switch']);
+
     test('pre-codegen: alias pointing at a built-in path still rewrites', () => {
         const aliases: AliasMap = { g: 'generate' };
-        const result = rewriteArgv(['g'], aliases, realPaths, {
+        const result = rewriteArgv(['g'], aliases, builtinPaths, {
             generatedCommandsPresent: false,
         });
 
@@ -274,12 +279,14 @@ describe('rewriteArgv()', () => {
     });
 
     test('pre-codegen: shadow warning is still emitted', () => {
-        const aliases: AliasMap = { customers: 'config switch' };
-        const result = rewriteArgv(['customers', 'list'], aliases, realPaths, {
+        // Pre-codegen, "customers" isn't a registered command, so an alias named
+        // "customers" can't shadow anything yet. Shadow a built-in instead.
+        const aliases: AliasMap = { config: 'generate' };
+        const result = rewriteArgv(['config', 'switch'], aliases, builtinPaths, {
             generatedCommandsPresent: false,
         });
 
-        expect(result.rewrittenArgs).toEqual(['customers', 'list']);
+        expect(result.rewrittenArgs).toEqual(['config', 'switch']);
         expect(result.warnings.length).toBe(1);
         expect(result.warnings[0]).toContain('shadows a real command');
         expect(result.errors).toEqual([]);

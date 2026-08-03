@@ -949,7 +949,10 @@ export function createCli(options: CliOptions): Cli {
 
             // 13. Apply project-local aliases (.apijack/aliases.json) by rewriting argv
             // before Commander parses. Real command paths always win over aliases;
-            // expansions that don't resolve to a known command are skipped with an error.
+            // expansions that don't resolve to a known command are skipped with an error
+            // — unless codegen hasn't run yet (or ran incompletely), in which case
+            // there's nothing meaningful to validate against and unresolved expansions
+            // are skipped silently.
             // The map was already loaded at the top of run() for early best-effort
             // resolution of pre-build argv reads — we reuse it here for the validated
             // rewrite now that the full Commander tree exists.
@@ -959,7 +962,7 @@ export function createCli(options: CliOptions): Cli {
                     process.argv.slice(2),
                     aliasMap,
                     realPaths,
-                    { generatedCommandsPresent: commandsModule !== null },
+                    { generatedCommandsPresent: commandsModule !== null && ApiClientClass !== null },
                 );
 
                 for (const w of warnings) {

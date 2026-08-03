@@ -806,6 +806,62 @@ describe('cli.run() plugin validation', () => {
     });
 });
 
+describe('alias validation before codegen has run (#136)', () => {
+    test('does not report unresolved generated-command aliases before `generate` has run', async () => {
+        const workDir = join(tmpdir(), `apijack-alias-precodegen-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        const cliConfigDir = join(workDir, '.testcli');
+        mkdirSync(cliConfigDir, { recursive: true });
+        // Points at an operation that would only exist once `generate` has run.
+        writeFileSync(
+            join(cliConfigDir, 'aliases.json'),
+            JSON.stringify({ cs: 'customers list-customers' }),
+        );
+
+        const origArgv = process.argv;
+        const origStderr = process.stderr.write.bind(process.stderr);
+        const origStdout = process.stdout.write.bind(process.stdout);
+        const origLog = console.log;
+        const origExit = process.exit;
+        let stderrOut = '';
+
+        try {
+            process.argv = ['node', 'testcli', 'config', 'list'];
+            process.stderr.write = ((c: string | Uint8Array) => {
+                stderrOut += String(c);
+
+                return true;
+            }) as never;
+            process.stdout.write = (() => true) as never;
+            console.log = () => {};
+            process.exit = (() => {
+                throw new Error('__exit__');
+            }) as never;
+
+            const cli = createCli(makeOptions({
+                configPath: join(cliConfigDir, 'config.json'),
+                // No `generated/` at this path — the same state as a fresh
+                // install where `generate` has not been run yet.
+                generatedDir: join(workDir, 'src', 'generated'),
+            }));
+
+            try {
+                await cli.run();
+            } catch (e) {
+                if ((e as Error).message !== '__exit__') throw e;
+            }
+        } finally {
+            process.argv = origArgv;
+            process.stderr.write = origStderr as never;
+            process.stdout.write = origStdout as never;
+            console.log = origLog;
+            process.exit = origExit;
+            rmSync(workDir, { recursive: true, force: true });
+        }
+
+        expect(stderrOut).not.toContain('does not resolve to a known command');
+    });
+});
+
 describe('cli.runRoutine', () => {
     let tmpHome: string;
     let configPath: string;
