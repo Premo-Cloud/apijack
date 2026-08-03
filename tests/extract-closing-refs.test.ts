@@ -140,6 +140,14 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             expect(issues).toEqual(['7', '8', '100']);
         });
 
+        test('a list marker followed by 5+ spaces starts indented code, not a deeper content column', async () => {
+            // CommonMark caps the content column at marker + 1 space when 5 or more
+            // follow; without the cap, base lands at 6 and the fence below opens —
+            // swallowing a real reference, the direction #134 exists to avoid.
+            const { issues } = await extract('-     item\n      ```\n      Closes #100\n      ```\nCloses #7\n');
+            expect(issues).toEqual(['7', '100']);
+        });
+
         test('a closer indented up to three deeper than its opener still closes', async () => {
             // The lenient reading of CommonMark's closer indent rule: it closes
             // sooner, which leaves later references visible.

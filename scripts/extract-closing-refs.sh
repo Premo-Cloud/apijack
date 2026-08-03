@@ -44,6 +44,8 @@
 #     indent 0 and a tab-indented list item as a marker at column 0
 #   - a lazy paragraph continuation dedented out of its list item pops the
 #     container early, which only lowers the column a fence must beat
+#   - a fence opener sharing a line with its list marker (`- ```) is not seen,
+#     because the opener is looked for at the line indent, not past the marker
 #
 # Network-free by design: it takes text, not a PR number. Callers do their own
 # fetching, which differs between them for good reasons (the label scripts hit
@@ -142,7 +144,10 @@ function strip_spans(s,   out, i, n, run, j, closerun, found) {
 
 # How far past its own indent the content of a list item starts — the marker width
 # plus the spaces after it. 0 when the line is not a list item. A marker at end
-# of line still opens an item whose content column is one past the marker.
+# of line still opens an item whose content column is one past the marker, and so
+# does one followed by 5+ spaces: per CommonMark those extra spaces are indented
+# code inside the item, so counting them would raise the column and let a fence
+# open where code was meant — swallowing a reference, the direction #134 avoids.
 function list_offset(p,   w, n, c) {
     w = 0
     c = substr(p, 1, 1)
@@ -161,6 +166,7 @@ function list_offset(p,   w, n, c) {
     if (substr(p, w + 1, 1) != " ") return 0
     n = 0
     while (substr(p, w + n + 1, 1) == " ") n++
+    if (n > 4) n = 1
     return w + n
 }
 
