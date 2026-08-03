@@ -34,18 +34,35 @@
 # a phantom fence and swallow every real reference after it, and a swallowed
 # reference is the one failure nothing flags.
 #
-# Known and deliberate gaps — all of them leave a reference VISIBLE (a possible
-# false positive), never hide a real one, which is the safer direction to err:
+# The one rule that can hide a reference is the flip side of that: a fence still
+# open when its list item ends is closed with the item, so an unterminated nested
+# fence cannot swallow the rest of the body. But if the item did not really end,
+# the fence's own closing line is then read as a NEW opener and everything after
+# it is swallowed instead — and when that second fence gets closed too, silently,
+# with no unterminated-fence warning. Anything that makes a line inside a fence
+# look shallower than the fence's container walks into this; the tab exemption in
+# the state machine is there for exactly that reason. Weigh it before touching
+# the escape.
+#
+# Known and deliberate gaps — all but the one noted above leave a reference
+# VISIBLE (a possible false positive) rather than hiding a real one, which is the
+# safer direction to err:
 #   - indented code blocks and blockquotes are not stripped (per #129: a
 #     blockquote can legitimately carry a real reference)
 #   - code spans are scanned per line, so a span that wraps across a newline
 #     leaks its contents
 #   - tabs are not expanded to tab stops, so a tab-indented fence reads as
-#     indent 0 and a tab-indented list item as a marker at column 0
+#     indent 0 and a tab-indented list item as a marker at column 0. Tab-led
+#     lines are exempt from the fence early-close above, which covers the one
+#     shape of this that hid references; a tab after leading spaces does not
+#     get that exemption
 #   - a lazy paragraph continuation dedented out of its list item pops the
 #     container early, which only lowers the column a fence must beat
 #   - a fence opener sharing a line with its list marker (`- ```) is not seen,
 #     because the opener is looked for at the line indent, not past the marker
+#   - a setext heading underline (`Title` over a bare `-`) reads as a list item
+#     and pushes a container, since detecting it needs previous-line state; the
+#     container it pushes can open indented code under it as a fence
 #
 # Network-free by design: it takes text, not a PR number. Callers do their own
 # fetching, which differs between them for good reasons (the label scripts hit
@@ -148,7 +165,19 @@ function strip_spans(s,   out, i, n, run, j, closerun, found) {
 # does one followed by 5+ spaces: per CommonMark those extra spaces are indented
 # code inside the item, so counting them would raise the column and let a fence
 # open where code was meant — swallowing a reference, the direction #134 avoids.
-function list_offset(p,   w, n, c) {
+function list_offset(p,   w, n, c, t) {
+    # A thematic break wears a marker character but is not a list item, and the
+    # container it would push raises the column enough to open the indented code
+    # under it as a fence. Spaces are allowed between the dashes, so compare the
+    # whitespace-stripped line: 3+ of the same character and nothing else.
+    t = p
+    gsub(/[[:space:]]/, "", t)
+    c = substr(t, 1, 1)
+    if (c == "-" || c == "*" || c == "_") {
+        n = 0
+        while (substr(t, n + 1, 1) == c) n++
+        if (n >= 3 && n == length(t)) return 0
+    }
     w = 0
     c = substr(p, 1, 1)
     if (c == "-" || c == "*" || c == "+") {
@@ -162,7 +191,9 @@ function list_offset(p,   w, n, c) {
         }
     }
     if (w == 0) return 0
-    if (length(p) == w) return w + 1
+    # Nothing but whitespace after the marker is an empty item, whose content
+    # column CommonMark also puts one past the marker.
+    if (substr(p, w + 1) ~ /^[[:space:]]*$/) return w + 1
     if (substr(p, w + 1, 1) != " ") return 0
     n = 0
     while (substr(p, w + n + 1, 1) == " ") n++
@@ -183,7 +214,12 @@ BEGIN {
     blank = ($0 ~ /^[[:space:]]*$/)
 
     if (in_fence) {
-        if (blank || indent >= fence_base) {
+        # A tab-led line is exempt from the dedent escape below: indent counts
+        # spaces only, so it reads as column 0, but CommonMark expands the tab
+        # to column 4 and keeps the line inside the fence. Without the exemption
+        # the fence ends here and its real closer opens a second one, swallowing
+        # every reference after it — silently, when that second fence is closed.
+        if (blank || indent >= fence_base || substr($0, 1, 1) == "\t") {
             if (match(probe, /^(```+|~~~+)/)) {
                 ch = substr(probe, 1, 1)
                 # The closer is measured against the opener rather than the
@@ -191,6 +227,7 @@ BEGIN {
                 if (ch == fence_char && RLENGTH >= fence_len && indent <= fence_indent + 3 &&
                     substr(probe, RLENGTH + 1) ~ /^[[:space:]]*$/) {
                     in_fence = 0; fence_char = ""; fence_len = 0
+                    fence_indent = 0; fence_base = 0
                 }
             }
             next
@@ -199,6 +236,7 @@ BEGIN {
         # with it. Fall through and process this line normally — an unclosed
         # nested fence must not swallow the rest of the body.
         in_fence = 0; fence_char = ""; fence_len = 0
+        fence_indent = 0; fence_base = 0
     }
 
     if (!blank) {

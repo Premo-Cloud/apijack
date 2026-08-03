@@ -176,6 +176,48 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             expect(issues).toEqual(['7']);
         });
 
+        test('a tab-indented line inside a nested fence does not end it', async () => {
+            // Indent counts spaces only, so a tab read as column 0 used to dedent
+            // out of the fence and leave the genuine closer to open a new one,
+            // swallowing everything after it. CommonMark puts a tab at column 4.
+            const { issues } = await extract('- a\n  ```\n\tcode\n  ```\nCloses #7\n');
+            expect(issues).toEqual(['7']);
+        });
+
+        test('a tab-indented line inside a nested fence does not silently reopen it', async () => {
+            // The variant of the above with a real second fence: the whole body
+            // shifted by one fence, exit 0, and no warning — a false negative
+            // with nothing to flag it.
+            const { issues, exitCode, stderr } = await extract('- a\n  ```\n\tcode\n  ```\n  Closes #7\n  ```\nCloses #8\n');
+            expect(issues).toEqual(['7', '8']);
+            expect(exitCode).toBe(0);
+            expect(stderr).toBe('');
+        });
+
+        test('a thematic break is not a list item', async () => {
+            // `- - -` and `* * *` are rules. Pushing a container for them raises
+            // the column enough for the indented code below to open as a fence.
+            const dashes = await extract('- - -\n    ```\n    Closes #100\n    ```\nCloses #7\n');
+            expect(dashes.issues).toEqual(['7', '100']);
+
+            const stars = await extract('* * *\n    ```\n    Closes #100\n    ```\nCloses #7\n');
+            expect(stars.issues).toEqual(['7', '100']);
+        });
+
+        test('a marker followed only by whitespace puts content one column past it', async () => {
+            // An empty list item, per CommonMark — counting the trailing spaces
+            // instead would raise the column and open the code block below.
+            const { issues } = await extract('-   \n      ```\n      Closes #100\n      ```\nCloses #7\n');
+            expect(issues).toEqual(['7', '100']);
+        });
+
+        test('a reference on the list-marker line itself is still printed', async () => {
+            // The one new code path that runs on a line carrying a live
+            // reference: it pushes a container and must still reach the print.
+            const { issues } = await extract('- Closes #7\n1. Closes #8\n- [ ] Closes #9\n');
+            expect(issues).toEqual(['7', '8', '9']);
+        });
+
         test('ignores refs inside a single-backtick inline span', async () => {
             const { issues } = await extract('Start the body with `Closes #100`. Closes #7\n');
             expect(issues).toEqual(['7']);
@@ -225,6 +267,13 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             // spaces is made inert) but deliberately does not strip it: per #129
             // a reference is better left visible than swallowed.
             const { issues } = await extract('para\n\n    Closes #100\n');
+            expect(issues).toEqual(['100']);
+        });
+
+        test('indented code inside a list item is not stripped either', async () => {
+            // The case the container fix actually introduces: base is 2 here, so
+            // the block starts at 6 rather than 4. Still visible, same as above.
+            const { issues } = await extract('- a\n\n      Closes #100\n');
             expect(issues).toEqual(['100']);
         });
 
