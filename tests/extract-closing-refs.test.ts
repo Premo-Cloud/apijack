@@ -194,6 +194,18 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             expect(stderr).toBe('');
         });
 
+        test('the tab exemption stops where a tab stops, at column 4', async () => {
+            // A leading tab reaches column 4 and no further, so once the fence
+            // sits in a container deeper than that, the line really is dedented
+            // out of it and the reference is prose. Holding it inside would
+            // swallow that reference silently — the defect the exemption above
+            // exists to fix, just moved deeper.
+            const { issues, exitCode, stderr } = await extract('- a\n  - b\n    - c\n      ```\n\tCloses #100\n      ```\nCloses #7\n');
+            expect(issues).toEqual(['7', '100']);
+            expect(exitCode).toBe(0);
+            expect(stderr).toBe('');
+        });
+
         test('a thematic break is not a list item', async () => {
             // `- - -` and `* * *` are rules. Pushing a container for them raises
             // the column enough for the indented code below to open as a fence.

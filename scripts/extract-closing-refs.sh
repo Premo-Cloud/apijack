@@ -44,18 +44,20 @@
 # the state machine is there for exactly that reason. Weigh it before touching
 # the escape.
 #
-# Known and deliberate gaps — all but the one noted above leave a reference
-# VISIBLE (a possible false positive) rather than hiding a real one, which is the
-# safer direction to err:
+# Known and deliberate gaps. Most leave a reference VISIBLE (a possible false
+# positive) rather than hiding a real one, which is the safer direction to err —
+# the two that can hide one, the early-close reopen above and the setext
+# underline below, say so where they are described:
 #   - indented code blocks and blockquotes are not stripped (per #129: a
 #     blockquote can legitimately carry a real reference)
 #   - code spans are scanned per line, so a span that wraps across a newline
 #     leaks its contents
 #   - tabs are not expanded to tab stops, so a tab-indented fence reads as
-#     indent 0 and a tab-indented list item as a marker at column 0. Tab-led
-#     lines are exempt from the fence early-close above, which covers the one
-#     shape of this that hid references; a tab after leading spaces does not
-#     get that exemption
+#     indent 0 and a tab-indented list item as a marker at column 0. A tab in
+#     column 1 is exempt from the fence early-close above while the fence sits
+#     at container column 4 or less — that is as far as a tab reaches, and it is
+#     the shape of this that hid references. A tab after leading spaces gets no
+#     exemption and lands wherever its space count puts it
 #   - a lazy paragraph continuation dedented out of its list item pops the
 #     container early, which only lowers the column a fence must beat
 #   - a fence opener sharing a line with its list marker (`- ```) is not seen,
@@ -219,7 +221,11 @@ BEGIN {
         # to column 4 and keeps the line inside the fence. Without the exemption
         # the fence ends here and its real closer opens a second one, swallowing
         # every reference after it — silently, when that second fence is closed.
-        if (blank || indent >= fence_base || substr($0, 1, 1) == "\t") {
+        # Column 4 is also where the exemption stops: in a container deeper than
+        # that the tab really does land short, so the line is out of the fence
+        # and its reference is prose. Holding it in would swallow that reference
+        # the same silent way, just deeper.
+        if (blank || indent >= fence_base || (substr($0, 1, 1) == "\t" && fence_base <= 4)) {
             if (match(probe, /^(```+|~~~+)/)) {
                 ch = substr(probe, 1, 1)
                 # The closer is measured against the opener rather than the
