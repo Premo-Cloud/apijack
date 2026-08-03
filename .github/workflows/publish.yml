@@ -25,6 +25,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      issues: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -106,6 +107,20 @@ jobs:
       # Publish to npm via trusted publishing (OIDC — no token needed)
       - name: Publish to npm
         run: npm publish
+
+      # This used to be a separate `release: published` workflow, but a
+      # release created with GITHUB_TOKEN (as above) never raises that
+      # event — the workflow existed for several releases and recorded zero
+      # runs. Running the notify logic inline, after publish, is what
+      # actually fires. See #133.
+      - name: Notify shipped issues
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          RELEASE_URL=$(gh release view "${{ github.ref_name }}" --json url --jq .url)
+          scripts/notify-shipped-issues.sh "${{ github.ref_name }}" "$RELEASE_URL"
 
   publish-next:
     runs-on: ubuntu-latest
