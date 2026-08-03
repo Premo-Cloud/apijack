@@ -959,6 +959,7 @@ export function createCli(options: CliOptions): Cli {
                     process.argv.slice(2),
                     aliasMap,
                     realPaths,
+                    { generatedCommandsPresent: commandsModule !== null },
                 );
 
                 for (const w of warnings) {
