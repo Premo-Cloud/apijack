@@ -962,7 +962,10 @@ export function createCli(options: CliOptions): Cli {
                     process.argv.slice(2),
                     aliasMap,
                     realPaths,
-                    { generatedCommandsPresent: commandsModule !== null && ApiClientClass !== null },
+                    // Mirrors the registration condition above — an existing client
+                    // module that doesn't export ApiClient leaves ApiClientClass
+                    // `undefined`, not `null`.
+                    { generatedCommandsPresent: !!commandsModule && !!ApiClientClass },
                 );
 
                 for (const w of warnings) {

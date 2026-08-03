@@ -151,6 +151,11 @@ describe('rewriteArgv()', () => {
         'generate',
     ]);
 
+    // Pre-codegen, only built-in commands are registered — no "customers *"
+    // paths exist yet. Used by the pre-codegen tests below so they reflect the
+    // actual state under test, rather than reusing the post-codegen `realPaths`.
+    const builtinPaths = new Set(['generate', 'config', 'config switch']);
+
     test('rewrites a single-token alias and appends trailing args', () => {
         const aliases: AliasMap = { cs: 'customers get-customer-order-summary' };
         const result = rewriteArgv(['cs', '42', '--foo', 'bar'], aliases, realPaths);
@@ -262,11 +267,6 @@ describe('rewriteArgv()', () => {
         expect(result.rewrittenArgs).toEqual(['cs', '42']);
         expect(result.errors).toEqual([]);
     });
-
-    // Pre-codegen, only built-in commands are registered — no "customers *"
-    // paths exist yet. Used by the two tests below so they reflect the actual
-    // state under test, rather than reusing the post-codegen `realPaths`.
-    const builtinPaths = new Set(['generate', 'config', 'config switch']);
 
     test('pre-codegen: alias pointing at a built-in path still rewrites', () => {
         const aliases: AliasMap = { g: 'generate' };
