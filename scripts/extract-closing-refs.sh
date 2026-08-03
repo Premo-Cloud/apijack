@@ -18,21 +18,32 @@
 # unrelated release PRs from months earlier.
 #
 # So: strip code before matching.
-#   - fenced blocks (``` and ~~~, per CommonMark: 3+ delimiters, up to 3
-#     spaces of indent, closing fence at least as long as the opening one)
+#   - fenced blocks (``` and ~~~, per CommonMark: 3+ delimiters, closing fence
+#     at least as long as the opening one)
 #   - inline code spans (`x`, ``x``, ...), scanned by matching delimiter-run
 #     length so ``Closes #10`` isn't half-stripped into a live reference
+#
+# Fence indent is measured from the content column of the enclosing list item,
+# not from column 0 (#134): a fence nested in a list legitimately sits at 4+
+# spaces, and reading it as prose leaked everything inside it. The awk pre-pass
+# therefore tracks open list items and allows a fence within 3 of that column.
+# List markers are capped the same way, and that cap is what makes the rule
+# safe: base + 4 is by definition an indented code block, so a fence marker or
+# a `- item` line inside indented code opens nothing. Recognizing a fence at any
+# indent instead was rejected — a stray fence marker in indented code would open
+# a phantom fence and swallow every real reference after it, and a swallowed
+# reference is the one failure nothing flags.
 #
 # Known and deliberate gaps — all of them leave a reference VISIBLE (a possible
 # false positive), never hide a real one, which is the safer direction to err:
 #   - indented code blocks and blockquotes are not stripped (per #129: a
 #     blockquote can legitimately carry a real reference)
-#   - a fence indented 4+ spaces is not recognized, so a fence nested inside a
-#     list item leaks its contents (#134). Allowing any indent would be worse:
-#     an indented-code-block fence marker would open a phantom fence and
-#     swallow every real reference after it.
 #   - code spans are scanned per line, so a span that wraps across a newline
 #     leaks its contents
+#   - tabs are not expanded to tab stops, so a tab-indented fence reads as
+#     indent 0 and a tab-indented list item as a marker at column 0
+#   - a lazy paragraph continuation dedented out of its list item pops the
+#     container early, which only lowers the column a fence must beat
 #
 # Network-free by design: it takes text, not a PR number. Callers do their own
 # fetching, which differs between them for good reasons (the label scripts hit
@@ -129,38 +140,93 @@ function strip_spans(s,   out, i, n, run, j, closerun, found) {
     return out
 }
 
-BEGIN { in_fence = 0; fence_char = ""; fence_len = 0 }
+# How far past its own indent the content of a list item starts — the marker width
+# plus the spaces after it. 0 when the line is not a list item. A marker at end
+# of line still opens an item whose content column is one past the marker.
+function list_offset(p,   w, n, c) {
+    w = 0
+    c = substr(p, 1, 1)
+    if (c == "-" || c == "*" || c == "+") {
+        w = 1
+    } else {
+        n = 0
+        while (substr(p, n + 1, 1) ~ /^[0-9]$/) n++
+        if (n > 0) {
+            c = substr(p, n + 1, 1)
+            if (c == "." || c == ")") w = n + 1
+        }
+    }
+    if (w == 0) return 0
+    if (length(p) == w) return w + 1
+    if (substr(p, w + 1, 1) != " ") return 0
+    n = 0
+    while (substr(p, w + n + 1, 1) == " ") n++
+    return w + n
+}
+
+BEGIN {
+    in_fence = 0; fence_char = ""; fence_len = 0; fence_indent = 0; fence_base = 0
+    depth = 0; base = 0
+}
 {
-    probe = $0
-    # Up to 3 spaces of indent still opens a fence; a 4th makes it an indented
-    # code block. Trimmed with a loop rather than /^ {0,3}/ because interval
-    # expressions are not portable across awk implementations.
+    # Leading spaces, counted with a loop rather than /^ */ because the count is
+    # needed and interval expressions are not portable across awk implementations.
     indent = 0
-    while (indent < 3 && substr(probe, 1, 1) == " ") {
-        probe = substr(probe, 2)
-        indent++
-    }
-    if (match(probe, /^(```+|~~~+)/)) {
-        marker = substr(probe, 1, RLENGTH)
-        ch = substr(marker, 1, 1)
-        len = RLENGTH
-        rest = substr(probe, RLENGTH + 1)
-        if (in_fence == 0) {
-            # A backtick info string cannot itself contain a backtick, so
-            # ```` `a` ```` opens nothing — it is an inline span.
-            if (ch == "`" && index(rest, "`") > 0) {
-                print strip_spans($0)
-                next
+    while (substr($0, indent + 1, 1) == " ") indent++
+    probe = substr($0, indent + 1)
+    blank = ($0 ~ /^[[:space:]]*$/)
+
+    if (in_fence) {
+        if (blank || indent >= fence_base) {
+            if (match(probe, /^(```+|~~~+)/)) {
+                ch = substr(probe, 1, 1)
+                # The closer is measured against the opener rather than the
+                # container: the lenient reading, which closes sooner.
+                if (ch == fence_char && RLENGTH >= fence_len && indent <= fence_indent + 3 &&
+                    substr(probe, RLENGTH + 1) ~ /^[[:space:]]*$/) {
+                    in_fence = 0; fence_char = ""; fence_len = 0
+                }
             }
-            in_fence = 1; fence_char = ch; fence_len = len
             next
         }
-        if (ch == fence_char && len >= fence_len && rest ~ /^[[:space:]]*$/) {
-            in_fence = 0; fence_char = ""; fence_len = 0
-            next
+        # Dedented out of the list item holding the fence, so the fence ended
+        # with it. Fall through and process this line normally — an unclosed
+        # nested fence must not swallow the rest of the body.
+        in_fence = 0; fence_char = ""; fence_len = 0
+    }
+
+    if (!blank) {
+        # A list item may contain blank lines, so only a non-blank line closes
+        # containers. Popping eagerly lowers base, which makes a deep fence
+        # LESS likely to be recognized — the false-positive direction.
+        while (depth > 0 && indent < stack[depth]) depth--
+        base = 0
+        if (depth > 0) base = stack[depth]
+
+        # Both markers below are capped at 3 past the content column of the
+        # container. base + 4 is by definition an indented code block, so a fence
+        # marker there is inert without tracking indented code separately — and
+        # the cap on list markers is what keeps a `- item` line inside indented
+        # code from opening a container that would re-enable deep fences.
+        if (indent <= base + 3) {
+            off = list_offset(probe)
+            if (off > 0) {
+                depth++
+                stack[depth] = indent + off
+                base = stack[depth]
+            } else if (match(probe, /^(```+|~~~+)/)) {
+                ch = substr(probe, 1, 1)
+                # A backtick info string cannot itself contain a backtick, so
+                # ```` `a` ```` opens nothing — it is an inline span.
+                if (ch != "`" || index(substr(probe, RLENGTH + 1), "`") == 0) {
+                    in_fence = 1; fence_char = ch; fence_len = RLENGTH
+                    fence_indent = indent; fence_base = base
+                    next
+                }
+            }
         }
     }
-    if (in_fence == 0) print strip_spans($0)
+    print strip_spans($0)
 }
 
 # A closing fence cannot carry a trailing info string, so one stray character on

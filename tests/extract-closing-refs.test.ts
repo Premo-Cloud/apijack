@@ -104,6 +104,70 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             expect(issues).toEqual(['7']);
         });
 
+        test('a fence nested inside a list item is recognized', async () => {
+            // CommonMark measures fence indent from the enclosing list item's
+            // content column, so a nested fence sits at 4+ spaces and used to
+            // leak everything inside it (#134).
+            const { issues } = await extract('Closes #7\n\n- outer\n  - inner\n    ```\n    Closes #100\n    ```\n');
+            expect(issues).toEqual(['7']);
+        });
+
+        test('recognizes a fence at a single list item content column', async () => {
+            // One level of nesting is the common shape in a PR body, and the
+            // fence still opens when a blank line separates it from the marker.
+            const { issues } = await extract('Closes #7\n\n- outer\n\n    ```\n    Closes #100\n    ```\n');
+            expect(issues).toEqual(['7']);
+        });
+
+        test('an ordered list marker sets the content column too', async () => {
+            // The content column cannot be assumed to be 2: `1. ` is three wide.
+            const { issues } = await extract('1. outer\n   ```\n   Closes #100\n   ```\nCloses #7\n');
+            expect(issues).toEqual(['7']);
+        });
+
+        test('a fence marker inside an indented code block opens nothing', async () => {
+            // The reason "recognize a fence at any indent" was rejected: a
+            // phantom fence here would swallow every real reference after it,
+            // which is the false-negative direction.
+            const { issues } = await extract('Closes #7\n\n    ```\n    not a fence\n\nCloses #8\n');
+            expect(issues).toEqual(['7', '8']);
+        });
+
+        test('a list marker inside an indented code block opens no container', async () => {
+            // Without the indent cap on list markers, this would push a
+            // container and re-enable the deep fence below it.
+            const { issues } = await extract('Closes #7\n\n    - item\n      ```\n      Closes #100\n\nCloses #8\n');
+            expect(issues).toEqual(['7', '8', '100']);
+        });
+
+        test('a closer indented up to three deeper than its opener still closes', async () => {
+            // The lenient reading of CommonMark's closer indent rule: it closes
+            // sooner, which leaves later references visible.
+            const { issues } = await extract('Closes #7\n\n- outer\n  ```\n  Closes #100\n    ```\n\nCloses #8\n');
+            expect(issues).toEqual(['7', '8']);
+        });
+
+        test('a deeper fence marker inside an open fence is content, not a closer', async () => {
+            // 4+ past the opener is code inside the block; treating it as a
+            // closer would expose the rest of the block as prose.
+            const { issues } = await extract('- a\n  ```\n      ```\n  Closes #100\n  ```\nCloses #7\n');
+            expect(issues).toEqual(['7']);
+        });
+
+        test('a fence left open inside a list item ends with the list item', async () => {
+            // Otherwise one unclosed nested fence hides every reference in the
+            // rest of the body.
+            const { issues } = await extract('- item\n  ```\n  code\n\nCloses #7\n');
+            expect(issues).toEqual(['7']);
+        });
+
+        test('a fence after the list has ended is measured from column 0 again', async () => {
+            // Containers have to be popped on dedent, or the body keeps the
+            // deepest content column it ever saw.
+            const { issues } = await extract('- a\n  - b\n\npara\n\n    ```\n    x\n\nCloses #7\n');
+            expect(issues).toEqual(['7']);
+        });
+
         test('ignores refs inside a single-backtick inline span', async () => {
             const { issues } = await extract('Start the body with `Closes #100`. Closes #7\n');
             expect(issues).toEqual(['7']);
@@ -148,12 +212,12 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
         // are pinned so the behavior can't drift silently; see the header comment
         // in scripts/extract-closing-refs.sh.
 
-        test('a fence indented 4+ spaces is not recognized', async () => {
-            // Legitimate inside a nested list item. Tracked as #134. Permitting any
-            // indent would be worse: an indented-code-block fence marker would open
-            // a phantom fence and swallow every real reference after it.
-            const { issues } = await extract('Closes #7\n\n- outer\n  - inner\n    ```\n    Closes #100\n    ```\n');
-            expect(issues).toEqual(['7', '100']);
+        test('an indented code block is not stripped', async () => {
+            // The fix models indented code (that is how a fence marker at 4+
+            // spaces is made inert) but deliberately does not strip it: per #129
+            // a reference is better left visible than swallowed.
+            const { issues } = await extract('para\n\n    Closes #100\n');
+            expect(issues).toEqual(['100']);
         });
 
         test('a code span wrapping across a newline is not stripped', async () => {
