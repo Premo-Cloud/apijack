@@ -31,6 +31,7 @@ import { prompt, hiddenPrompt } from './prompt';
 import { SessionAuthStrategy } from './auth/session-auth';
 import { resolveRequestHeaders } from './auth/resolve-headers';
 import { deepMergeSessionAuth } from './auth/config-merge';
+import { resolveRefreshWiring } from './auth/refresh-wiring';
 import { loadPreRequestHook } from './pre-request';
 import type { RoutineResult } from './routine/executor';
 import { executeRoutine } from './routine/executor';
@@ -195,9 +196,7 @@ export function createCli(options: CliOptions): Cli {
 
         // 3. Compute auth strategy + sessionMgr.
         const envConfig = getActiveEnvConfig(cliName, configOpts);
-        const mergedSessionAuth = options.sessionAuth
-            ? deepMergeSessionAuth(options.sessionAuth, envConfig?.sessionAuth)
-            : undefined;
+        const { mergedSessionAuth, refreshOn } = resolveRefreshWiring(options, envConfig);
         const strategy = mergedSessionAuth
             ? new SessionAuthStrategy(options.auth, mergedSessionAuth)
             : options.auth;
@@ -255,8 +254,8 @@ export function createCli(options: CliOptions): Cli {
             const client = new ApiClientClass(
                 resolved.baseUrl ?? '',
                 getHeaders,
-                mergedSessionAuth ? async () => { await ctx.refreshSession(); } : undefined,
-                mergedSessionAuth?.refreshOn,
+                async () => { await ctx.refreshSession(); },
+                refreshOn,
             ) as Record<string, unknown>;
 
             ctx.client = client;
@@ -544,14 +543,13 @@ export function createCli(options: CliOptions): Cli {
 
             // 5. Compute auth strategy (no network — just config)
             let mergedSessionAuth: ReturnType<typeof deepMergeSessionAuth> | undefined;
+            let refreshOn: number[] | undefined;
             let strategy = options.auth;
             let sessionMgr: SessionManager | null = null;
 
             if (resolved) {
                 const envConfig = getActiveEnvConfig(cliName, configOpts);
-                mergedSessionAuth = options.sessionAuth
-                    ? deepMergeSessionAuth(options.sessionAuth, envConfig?.sessionAuth)
-                    : undefined;
+                ({ mergedSessionAuth, refreshOn } = resolveRefreshWiring(options, envConfig));
                 strategy = mergedSessionAuth
                     ? new SessionAuthStrategy(options.auth, mergedSessionAuth)
                     : options.auth;
@@ -656,8 +654,8 @@ export function createCli(options: CliOptions): Cli {
                 const client = new ApiClientClass(
                     resolved?.baseUrl ?? '',
                     getHeaders,
-                    mergedSessionAuth ? async () => { await ctx!.refreshSession(); } : undefined,
-                    mergedSessionAuth?.refreshOn,
+                    ctx ? async () => { await ctx!.refreshSession(); } : undefined,
+                    refreshOn,
                 ) as Record<string, unknown>;
 
                 if (ctx) ctx.client = client;

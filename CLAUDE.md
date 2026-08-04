@@ -216,6 +216,14 @@ new SessionAuthStrategy(new BasicAuthStrategy(), {
 
 When the generated client receives a status in `refreshOn`, it calls the wired refresh callback — which invalidates the cached session and re-bootstraps `/session` — then retries the original request once. Capped at one retry. Strategies that don't use `/session` are unaffected (the field is ignored).
 
+`refreshOn` isn't limited to `SessionAuthStrategy` — a project on a custom `AuthStrategy` (`.apijack/auth.ts`) can opt in without a `sessionAuth` block at all, via `.apijack/settings.json`:
+
+```json
+{ "auth": { "refreshOn": [401] } }
+```
+
+The refresh callback re-invokes the custom strategy's `authenticate()` rather than re-bootstrapping `/session`. `settings.json` `auth.refreshOn` takes precedence over `sessionAuth.refreshOn` when both are set.
+
 ### Dropping base-strategy headers post-handshake (opt-in)
 
 By default, `SessionAuthStrategy` mirrors the wrapped base strategy's headers (e.g. `Authorization: Basic …` from `BasicAuthStrategy`) onto every post-handshake API request. For stateful backends — Spring Security with 2FA, for instance — re-presenting the base credentials on every call re-triggers the auth filter and either re-prompts, 401s, or invalidates the active session. Opt in to `dropBaseHeaders` to strip them:
