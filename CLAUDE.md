@@ -214,7 +214,7 @@ new SessionAuthStrategy(new BasicAuthStrategy(), {
 });
 ```
 
-When the generated client receives a status in `refreshOn`, it calls the wired refresh callback — which invalidates the cached session and re-bootstraps `/session` — then retries the original request once. Capped at one retry. `sessionAuth.refreshOn` only takes effect on a `sessionAuth` block with a `session.endpoint` — see below for the route that works without one.
+When the generated client receives a status in `refreshOn`, it calls the wired refresh callback — which invalidates the cached session and re-bootstraps `/session` — then retries the original request once. Capped at one retry. Wrapping the strategy in `SessionAuthStrategy` requires a `session.endpoint`, but `refreshOn` itself doesn't — see below for the route that works without one.
 
 `refreshOn` isn't limited to `SessionAuthStrategy` — a project on a custom `AuthStrategy` (`.apijack/auth.ts`) can opt in without a `sessionAuth` block at all, via `.apijack/settings.json`:
 
