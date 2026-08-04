@@ -30,8 +30,8 @@ import { registerRoutineCommand, loadBuiltinRoutines } from './commands/routine/
 import { prompt, hiddenPrompt } from './prompt';
 import { SessionAuthStrategy } from './auth/session-auth';
 import { resolveRequestHeaders } from './auth/resolve-headers';
-import { deepMergeSessionAuth } from './auth/config-merge';
 import { resolveRefreshWiring } from './auth/refresh-wiring';
+import type { SessionAuthConfig } from './auth/types';
 import { loadPreRequestHook } from './pre-request';
 import type { RoutineResult } from './routine/executor';
 import { executeRoutine } from './routine/executor';
@@ -542,7 +542,7 @@ export function createCli(options: CliOptions): Cli {
             }
 
             // 5. Compute auth strategy (no network — just config)
-            let mergedSessionAuth: ReturnType<typeof deepMergeSessionAuth> | undefined;
+            let mergedSessionAuth: SessionAuthConfig | undefined;
             let refreshOn: number[] | undefined;
             let strategy = options.auth;
             let sessionMgr: SessionManager | null = null;

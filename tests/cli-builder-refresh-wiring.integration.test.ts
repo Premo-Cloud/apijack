@@ -4,8 +4,10 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { createCli, type Cli } from '../src/cli-builder';
 import type { CliOptions, CliContext } from '../src/types';
-import type { AuthStrategy, AuthSession, SessionAuthConfig } from '../src/auth/types';
+import type { AuthStrategy, AuthSession, ResolvedAuth, SessionAuthConfig } from '../src/auth/types';
 import { BasicAuthStrategy } from '../src/auth/basic';
+import { SessionManager } from '../src/session';
+import { resolveRequestHeaders } from '../src/auth/resolve-headers';
 import { generateClient } from '../src/codegen/client';
 import type { OpenApiOperation } from '../src/codegen/openapi-types';
 
@@ -200,6 +202,74 @@ describe('#135 refreshOn wiring for custom AuthStrategy (both cli-builder.ts cal
         expect(result.status).not.toBe('ok');
         expect(deleteCount).toBe(2); // initial + exactly one retry, no further attempts
         expect(calls.count).toBe(2); // initial authenticate() + exactly one refresh attempt
+    });
+
+    test('custom-strategy path: when the refresh callback throws, original 401 is preserved with refresh error as cause (#98 regression)', async () => {
+        // The RoutineResult surface only carries a stringified step error, so this
+        // asserts on the thrown Error's {status, body, cause} directly against the
+        // generated ApiClient — wired exactly as cli-builder.ts wires it (custom
+        // AuthStrategy + SessionManager, refreshOn passed straight through, no
+        // SessionAuthStrategy involved). Mirrors
+        // tests/auth/session-auth-stale-retry.integration.test.ts's #98 case, but
+        // for a custom (non-session) strategy.
+        const generatedDir = join(tmpHome, 'generated');
+        writeGeneratedFixture(generatedDir);
+
+        const resolved: ResolvedAuth = { baseUrl: 'https://api.example.com', username: 'user', password: 'pass' };
+        const { strategy } = makeCustomStrategy();
+        const sessionMgr = new SessionManager('testcli', join(tmpHome, 'session.json'));
+
+        const originalErrorBody = JSON.stringify({ status: 401, error: 'Unauthorized', path: '/admin/matters/5' });
+        let deleteCount = 0;
+
+        globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+            const urlStr = typeof url === 'string'
+                ? url
+                : url instanceof URL ? url.toString() : url.url;
+            const method = (init?.method ?? 'GET').toUpperCase();
+
+            if (urlStr.includes('/admin/matters/5') && method === 'DELETE') {
+                deleteCount++;
+
+                return new Response(originalErrorBody, { status: 401 });
+            }
+
+            return new Response('not found', { status: 404 });
+        }) as typeof fetch;
+
+        // Refresh callback that always fails — simulates creds being rotated.
+        const refreshFailure = new Error('refresh failed: credentials no longer valid');
+        const refreshSession = async () => {
+            throw refreshFailure;
+        };
+
+        const { ApiClient } = await import(join(generatedDir, 'client.ts')) as { ApiClient: new (
+            baseUrl: string,
+            getHeaders: (method: string) => Record<string, string>,
+            onRefreshNeeded?: () => Promise<void>,
+            refreshOn?: number[],
+        ) => { deleteMatter(id: number): Promise<unknown> }; };
+
+        const session: AuthSession = await sessionMgr.resolve(strategy, resolved);
+        const getHeaders = (method: string) => resolveRequestHeaders(session, undefined, method);
+        const client = new ApiClient(resolved.baseUrl, getHeaders, refreshSession, [401]);
+
+        let thrown: unknown;
+
+        try {
+            await client.deleteMatter(5);
+        } catch (err) {
+            thrown = err;
+        }
+
+        expect(thrown).toBeInstanceOf(Error);
+        const err = thrown as Error & { status?: number; body?: string; cause?: unknown };
+        expect(err.status).toBe(401);
+        expect(err.body).toBe(originalErrorBody);
+        expect(err.cause).toBe(refreshFailure);
+
+        // Original request was made once; no retry attempted because refresh failed.
+        expect(deleteCount).toBe(1);
     });
 
     test('createCli path (runRoutine): sessionAuth.refreshOn fallback still works when options.refreshOn is unset (#77 regression)', async () => {

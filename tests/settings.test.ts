@@ -27,6 +27,17 @@ describe('loadProjectSettings()', () => {
         expect(settings.customCommands?.defaults?.requiresAuth).toBe(true);
     });
 
+    test('reads auth.refreshOn', () => {
+        mkdirSync(testRoot, { recursive: true });
+        writeFileSync(
+            join(testRoot, 'settings.json'),
+            JSON.stringify({ auth: { refreshOn: [401] } }),
+        );
+
+        const settings = loadProjectSettings(testRoot);
+        expect(settings.auth?.refreshOn).toEqual([401]);
+    });
+
     test('returns empty object on malformed JSON', () => {
         mkdirSync(testRoot, { recursive: true });
         writeFileSync(join(testRoot, 'settings.json'), '{ not json');
