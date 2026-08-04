@@ -171,9 +171,10 @@ function list_offset(p,   w, n, c, t) {
     # A thematic break wears a marker character but is not a list item, and the
     # container it would push raises the column enough to open the indented code
     # under it as a fence. Spaces are allowed between the dashes, so compare the
-    # whitespace-stripped line: 3+ of one character and nothing else. That also
-    # catches `- ---`, which CommonMark reads as a list item CONTAINING a break;
-    # returning 0 there only lowers the column, so it errs the safe way.
+    # whitespace-stripped line: 3+ of one character and nothing else. `- ---`
+    # lands here too and should: a thematic break outranks a list item when a
+    # line could be read as either, so four dashes with a space among them are
+    # a break, and returning 0 matches CommonMark rather than merely erring safe.
     t = p
     gsub(/[[:space:]]/, "", t)
     c = substr(t, 1, 1)

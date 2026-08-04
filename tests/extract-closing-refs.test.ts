@@ -320,10 +320,12 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
         });
 
         test('a fence closed after an early close hides the rest — but warns', async () => {
-            // HIDES a reference. Flush-left code under a bullet dedents out of
-            // the item, so the fence ends early and its real closer opens a
-            // second one over the remainder. CommonMark agrees the reference is
-            // code here, and the unterminated warning fires, so it stays audible.
+            // Pins the MECHANISM, not a divergence. Flush-left code under a
+            // bullet dedents out of the item, so the fence ends early and its
+            // real closer opens a second one over the remainder. In this shape
+            // CommonMark agrees the reference is code and the warning fires, so
+            // nothing is actually hidden — a shape where the mechanism does
+            // diverge is hard to construct, which is why this stands in for it.
             const { issues, stderr } = await extract('- Steps:\n  ```bash\nnpm install\n  ```\n\nCloses #7\n');
             expect(issues).toEqual([]);
             expect(stderr).toContain('unterminated code fence');
