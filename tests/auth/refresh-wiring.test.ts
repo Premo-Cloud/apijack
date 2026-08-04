@@ -84,6 +84,37 @@ describe('resolveRefreshWiring', () => {
             }
         });
 
+        test('warns and names onChallenge when a refreshOn-only block also carries a defined onChallenge (intentional, #148)', () => {
+            // bin/apijack.ts and src/run-routine.ts both inject `onChallenge` from
+            // .apijack/auth.ts into the sessionAuth object before it reaches here, so a
+            // project with a deliberate refreshOn-only block AND a custom onChallenge
+            // export ends up with foundKeys === ['onChallenge']. That's NOT a leak of the
+            // bug this file just fixed: onChallenge is only ever consumed by
+            // SessionAuthStrategy, which is never constructed without a session.endpoint,
+            // so in this exact config the hook is genuinely dead code — the warning is
+            // pointing at a real mistake (an onChallenge that can never fire), not at the
+            // supported refreshOn-only pattern.
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+            const refreshOnlyWithChallenge = {
+                refreshOn: [401],
+                onChallenge: async () => {},
+            } as unknown as SessionAuthConfig;
+
+            try {
+                const result = resolveRefreshWiring({ sessionAuth: refreshOnlyWithChallenge }, undefined);
+                expect(warnSpy).toHaveBeenCalledTimes(1);
+                const message = warnSpy.mock.calls[0]![0] as string;
+                expect(message).toContain('session.endpoint');
+                expect(message).toContain('onChallenge');
+                expect(message).not.toContain('refreshOn');
+                // refreshOn behavior from #135 is unchanged even in this configuration.
+                expect(result.mergedSessionAuth).toBeUndefined();
+                expect(result.refreshOn).toEqual([401]);
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
+
         test('warns and names the found keys for a block with a typo\'d handshake key', () => {
             const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
             // `sessions:` instead of `session:` — the block has handshake-shaped keys
