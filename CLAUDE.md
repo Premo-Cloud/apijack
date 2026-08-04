@@ -224,6 +224,8 @@ When the generated client receives a status in `refreshOn`, it calls the wired r
 
 The refresh callback re-invokes the custom strategy's `authenticate()` rather than re-bootstrapping `/session`. `settings.json` `auth.refreshOn` takes precedence over `sessionAuth.refreshOn` when both are set.
 
+`.apijack/settings.json` only applies to consumers of the shared `apijack` binary; a project with its own `bin/<cli>.ts` sets the same option programmatically instead: `createCli({ refreshOn: [401], /* ... */ })`.
+
 ### Dropping base-strategy headers post-handshake (opt-in)
 
 By default, `SessionAuthStrategy` mirrors the wrapped base strategy's headers (e.g. `Authorization: Basic …` from `BasicAuthStrategy`) onto every post-handshake API request. For stateful backends — Spring Security with 2FA, for instance — re-presenting the base credentials on every call re-triggers the auth filter and either re-prompts, 401s, or invalidates the active session. Opt in to `dropBaseHeaders` to strip them:
@@ -250,7 +252,7 @@ The `.apijack/` directory at a project root is auto-loaded when the CLI runs ins
 | `.apijack/auth.ts` | Project-level `AuthStrategy` and optional `onChallenge` |
 | `.apijack/plugins.ts` | Project-level plugin registrations (`default: ApijackPlugin[]` — each entry passed to `cli.use(...)`) |
 | `.apijack/routines/*.yaml` | Routines available via `routine run <name>` |
-| `.apijack/settings.json` | Framework defaults (see below) |
+| `.apijack/settings.json` | Framework defaults (see below; also `auth.refreshOn` — see "Stale-session refresh and retry" above) |
 | `.apijack/aliases.json` | Project-local command aliases (see below) |
 
 ### Command aliases
