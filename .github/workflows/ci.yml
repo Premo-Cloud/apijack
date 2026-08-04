@@ -52,8 +52,9 @@ jobs:
           # in scripts/ship.sh, both fixed here) without the noise of `style`
           # (5 on the current tree — all SC1091/SC2016/SC2317, none real
           # defects). No --enable=all: SC2310/SC2311 fire zero times here, so
-          # enabling `all` would only add ~35 info + ~592 style findings for no
-          # signal on the case it was proposed for.
+          # enabling `all` would only add tens of info and hundreds of style
+          # findings (37 and 614 when this was written) for no signal on the
+          # case it was proposed for.
           shopt -s nullglob globstar
 
           script_files=(scripts/**/*.sh)
