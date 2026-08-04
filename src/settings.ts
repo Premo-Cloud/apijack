@@ -7,6 +7,11 @@ export interface ProjectSettings {
             requiresAuth?: boolean;
         };
     };
+    auth?: {
+        /** HTTP statuses that trigger a one-shot session refresh + retry, for
+         *  any auth strategy. See `CliOptions.refreshOn`. */
+        refreshOn?: number[];
+    };
 }
 
 export function loadProjectSettings(apijackDir: string): ProjectSettings {

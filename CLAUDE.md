@@ -214,7 +214,15 @@ new SessionAuthStrategy(new BasicAuthStrategy(), {
 });
 ```
 
-When the generated client receives a status in `refreshOn`, it calls the wired refresh callback — which invalidates the cached session and re-bootstraps `/session` — then retries the original request once. Capped at one retry. Strategies that don't use `/session` are unaffected (the field is ignored).
+When the generated client receives a status in `refreshOn`, it calls the wired refresh callback — which invalidates the cached session and re-bootstraps `/session` — then retries the original request once. Capped at one retry. Wrapping the strategy in `SessionAuthStrategy` requires a `session.endpoint`, but `refreshOn` itself doesn't — see below for the route that works without one.
+
+`refreshOn` isn't limited to `SessionAuthStrategy` — a project on a custom `AuthStrategy` (`.apijack/auth.ts`) can opt in without a `sessionAuth` block at all, via `.apijack/settings.json`:
+
+```json
+{ "auth": { "refreshOn": [401] } }
+```
+
+The refresh callback re-invokes the custom strategy's `authenticate()` rather than re-bootstrapping `/session`. `settings.json` `auth.refreshOn` takes precedence over `sessionAuth.refreshOn` when both are set.
 
 ### Dropping base-strategy headers post-handshake (opt-in)
 

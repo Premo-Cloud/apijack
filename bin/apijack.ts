@@ -150,6 +150,7 @@ const cli = createCli({
     specPath,
     auth: authStrategy,
     sessionAuth,
+    refreshOn: projectSettings.auth?.refreshOn,
     generatedDir,
     allowedCidrs: projectConfig?.allowedCidrs,
     defaultUrl: projectConfig?.defaultUrl,
