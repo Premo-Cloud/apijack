@@ -38,9 +38,9 @@ promote_issues() {
 # GraphQL, which is eventually consistent — mergeCommit is briefly null. Retry
 # rather than hard-stop: past this point a bail leaves the release unpublished.
 resolve_merge_sha() {
-    local pr="$1" attempt
+    local pr="$1" _
     MERGE_SHA=""
-    for attempt in $(seq 1 5); do
+    for _ in $(seq 1 5); do
         MERGE_SHA=$(gh pr view "$pr" --json mergeCommit --jq '.mergeCommit.oid // empty' 2>/dev/null || true)
         [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ] && return 0
         sleep 3
@@ -58,7 +58,7 @@ resolve_merge_sha() {
 tag_and_publish() {
     local sha="$1" version="$2"
     local tag="v$version"
-    local existing run attempt
+    local existing run _
 
     # The merge commit is created server-side — fetch before tagging it.
     git fetch origin main --quiet || {
@@ -102,7 +102,7 @@ tag_and_publish() {
     # registration lag, then fail loudly rather than exiting 0 on a guess.
     info "Waiting for publish workflow..."
     run=""
-    for attempt in $(seq 1 30); do
+    for _ in $(seq 1 30); do
         run=$(gh run list --workflow publish.yml --commit "$sha" --limit 1 --json databaseId --jq '.[0].databaseId // empty' 2>/dev/null || true)
         [ -n "$run" ] && break
         sleep 10

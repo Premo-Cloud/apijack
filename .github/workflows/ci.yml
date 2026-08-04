@@ -14,6 +14,8 @@ on:
       - 'bun.lockb'
       - 'tsconfig*.json'
       - '.github/workflows/ci.yml'
+      - 'scripts/**'
+      - '.claude/skills/**/scripts/**'
 
 jobs:
   lint:
@@ -25,6 +27,47 @@ jobs:
           bun-version: latest
       - run: bun install
       - run: bun run lint
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install shellcheck v0.10.0
+        run: |
+          set -euo pipefail
+          url="https://github.com/koalaman/shellcheck/releases/download/v0.10.0/shellcheck-v0.10.0.linux.x86_64.tar.xz"
+          sha256="6c881ab0698e4e6ea235245f22832860544f17ba386442fe7e9d629f8cbedf87"
+          curl -sSL --fail --retry 3 --retry-all-errors "$url" -o "$RUNNER_TEMP/shellcheck.tar.xz"
+          echo "$sha256  $RUNNER_TEMP/shellcheck.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/shellcheck.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-v0.10.0" >> "$GITHUB_PATH"
+      - name: Run shellcheck
+        run: |
+          set -euo pipefail
+          # severity=warning: `error` is a no-op gate (0 findings measured against
+          # this tree); `warning` catches the real issues (2 SC2034 in scripts/ship.sh,
+          # both fixed) without the noise of `style` (5). No --enable=all:
+          # SC2310/SC2311 fire zero times here, so enabling `all` would only add
+          # ~35 info + ~592 style findings for no signal on the case it was
+          # proposed for.
+          shopt -s nullglob globstar
+
+          script_files=(scripts/**/*.sh)
+          if [ "${#script_files[@]}" -eq 0 ]; then
+            echo "::error::scripts/**/*.sh matched no files"
+            exit 1
+          fi
+
+          skill_files=(.claude/skills/**/scripts/*.sh)
+          if [ "${#skill_files[@]}" -eq 0 ]; then
+            echo "::error::.claude/skills/**/scripts/*.sh matched no files"
+            exit 1
+          fi
+
+          shellcheck --severity=warning "${script_files[@]}" "${skill_files[@]}"
 
   unit-tests:
     strategy:
