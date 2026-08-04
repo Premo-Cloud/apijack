@@ -36,5 +36,11 @@ export function resolveRefreshWiring(
     const mergedSessionAuth = rawSessionAuth?.session?.endpoint ? rawSessionAuth : undefined;
     const refreshOn = options.refreshOn ?? rawSessionAuth?.refreshOn;
 
+    if (rawSessionAuth && !mergedSessionAuth) {
+        console.warn(
+            '[apijack] sessionAuth is set but missing session.endpoint — SessionAuthStrategy will not be used.',
+        );
+    }
+
     return { mergedSessionAuth, refreshOn };
 }

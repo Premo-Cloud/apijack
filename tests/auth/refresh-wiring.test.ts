@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, spyOn } from 'bun:test';
 import { resolveRefreshWiring } from '../../src/auth/refresh-wiring';
 import type { SessionAuthConfig } from '../../src/auth/types';
 
@@ -50,11 +50,17 @@ describe('resolveRefreshWiring', () => {
         // Not expressible through the SessionAuthConfig type from a fully-typed
         // caller, but envConfig.sessionAuth is only a Partial<SessionAuthConfig> —
         // a JS/dynamic caller could still hand cli-builder a refreshOn-only block.
+        const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
         const refreshOnlySessionAuth = { refreshOn: [401] } as unknown as SessionAuthConfig;
-        const result = resolveRefreshWiring({ sessionAuth: refreshOnlySessionAuth }, undefined);
-        expect(result.mergedSessionAuth).toBeUndefined();
-        // refreshOn still surfaces from the raw (unguarded) merge.
-        expect(result.refreshOn).toEqual([401]);
+
+        try {
+            const result = resolveRefreshWiring({ sessionAuth: refreshOnlySessionAuth }, undefined);
+            expect(result.mergedSessionAuth).toBeUndefined();
+            // refreshOn still surfaces from the raw (unguarded) merge.
+            expect(result.refreshOn).toEqual([401]);
+        } finally {
+            warnSpy.mockRestore();
+        }
     });
 
     test('does not mutate inputs', () => {
@@ -64,5 +70,42 @@ describe('resolveRefreshWiring', () => {
             { sessionAuth: { cookies: { applyTo: ['*'] } } },
         );
         expect(fullSessionAuth).toEqual(sessionAuthCopy);
+    });
+
+    describe('missing session.endpoint diagnostic warning', () => {
+        test('warns when sessionAuth is set but has no session.endpoint', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+            const refreshOnlySessionAuth = { refreshOn: [401] } as unknown as SessionAuthConfig;
+
+            try {
+                resolveRefreshWiring({ sessionAuth: refreshOnlySessionAuth }, undefined);
+                expect(warnSpy).toHaveBeenCalledTimes(1);
+                expect(warnSpy.mock.calls[0]![0]).toContain('session.endpoint');
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
+
+        test('does not warn when there is no sessionAuth at all', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+
+            try {
+                resolveRefreshWiring({ refreshOn: [401] }, undefined);
+                expect(warnSpy).not.toHaveBeenCalled();
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
+
+        test('does not warn when sessionAuth has a session.endpoint', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+
+            try {
+                resolveRefreshWiring({ sessionAuth: fullSessionAuth }, undefined);
+                expect(warnSpy).not.toHaveBeenCalled();
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
     });
 });
