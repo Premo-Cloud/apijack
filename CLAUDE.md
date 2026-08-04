@@ -265,6 +265,7 @@ Resolution rules:
 - Longest-prefix wins when multiple aliases could match.
 - An alias that shadows a real command path emits a startup warning and the real command keeps winning.
 - An expansion that doesn't resolve to a known command emits a startup error; the CLI continues without that alias applied.
+- Before `generate` has run (no generated commands registered), unresolved expansions are skipped silently instead — there is nothing meaningful to validate against yet.
 - A global `~/.<cliName>/aliases.json` is also consulted; project-local entries override global entries on conflict.
 - **Routines and MCP tool resolution use canonical names only.** Aliases are a CLI ergonomics layer; routine YAML and MCP tool names are not affected.
 

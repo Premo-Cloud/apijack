@@ -151,6 +151,11 @@ describe('rewriteArgv()', () => {
         'generate',
     ]);
 
+    // Pre-codegen, only built-in commands are registered — no "customers *"
+    // paths exist yet. Used by the pre-codegen tests below so they reflect the
+    // actual state under test, rather than reusing the post-codegen `realPaths`.
+    const builtinPaths = new Set(['generate', 'config', 'config switch']);
+
     test('rewrites a single-token alias and appends trailing args', () => {
         const aliases: AliasMap = { cs: 'customers get-customer-order-summary' };
         const result = rewriteArgv(['cs', '42', '--foo', 'bar'], aliases, realPaths);
@@ -249,6 +254,62 @@ describe('rewriteArgv()', () => {
         // alias appears mid-args, not at the start — should not rewrite
         const result = rewriteArgv(['config', 'cs'], aliases, realPaths);
         expect(result.rewrittenArgs).toEqual(['config', 'cs']);
+    });
+
+    test('pre-codegen: alias pointing at a generated path is skipped silently', () => {
+        // Pre-codegen, "customers get-customer-order-summary" hasn't been registered
+        // yet, so it's absent from realPaths — same situation as an unknown expansion.
+        const aliases: AliasMap = { cs: 'customers get-customer-order-summary' };
+        const result = rewriteArgv(['cs', '42'], aliases, new Set(['generate', 'config']), {
+            generatedCommandsPresent: false,
+        });
+
+        expect(result.rewrittenArgs).toEqual(['cs', '42']);
+        expect(result.errors).toEqual([]);
+    });
+
+    test('pre-codegen: alias pointing at a built-in path still rewrites', () => {
+        const aliases: AliasMap = { g: 'generate' };
+        const result = rewriteArgv(['g'], aliases, builtinPaths, {
+            generatedCommandsPresent: false,
+        });
+
+        expect(result.rewrittenArgs).toEqual(['generate']);
+        expect(result.errors).toEqual([]);
+    });
+
+    test('pre-codegen: shadow warning is still emitted', () => {
+        // Pre-codegen, "customers" isn't a registered command, so an alias named
+        // "customers" can't shadow anything yet. Shadow a built-in instead.
+        const aliases: AliasMap = { config: 'generate' };
+        const result = rewriteArgv(['config', 'switch'], aliases, builtinPaths, {
+            generatedCommandsPresent: false,
+        });
+
+        expect(result.rewrittenArgs).toEqual(['config', 'switch']);
+        expect(result.warnings.length).toBe(1);
+        expect(result.warnings[0]).toContain('shadows a real command');
+        expect(result.errors).toEqual([]);
+    });
+
+    test('post-codegen: broken alias still emits an error', () => {
+        const aliases: AliasMap = { cs: 'customers nope' };
+        const result = rewriteArgv(['cs', '42'], aliases, realPaths, {
+            generatedCommandsPresent: true,
+        });
+
+        expect(result.rewrittenArgs).toEqual(['cs', '42']);
+        expect(result.errors.length).toBe(1);
+        expect(result.errors[0]).toContain('does not resolve');
+    });
+
+    test('option omitted: broken alias still emits an error (default is validation on)', () => {
+        const aliases: AliasMap = { cs: 'customers nope' };
+        const result = rewriteArgv(['cs', '42'], aliases, realPaths);
+
+        expect(result.rewrittenArgs).toEqual(['cs', '42']);
+        expect(result.errors.length).toBe(1);
+        expect(result.errors[0]).toContain('does not resolve');
     });
 });
 
