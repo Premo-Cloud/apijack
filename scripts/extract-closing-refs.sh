@@ -171,7 +171,9 @@ function list_offset(p,   w, n, c, t) {
     # A thematic break wears a marker character but is not a list item, and the
     # container it would push raises the column enough to open the indented code
     # under it as a fence. Spaces are allowed between the dashes, so compare the
-    # whitespace-stripped line: 3+ of the same character and nothing else.
+    # whitespace-stripped line: 3+ of one character and nothing else. That also
+    # catches `- ---`, which CommonMark reads as a list item CONTAINING a break;
+    # returning 0 there only lowers the column, so it errs the safe way.
     t = p
     gsub(/[[:space:]]/, "", t)
     c = substr(t, 1, 1)
@@ -185,9 +187,12 @@ function list_offset(p,   w, n, c, t) {
     if (c == "-" || c == "*" || c == "+") {
         w = 1
     } else {
+        # CommonMark caps an ordered marker at 9 digits; a longer run is a
+        # paragraph, and treating it as an item would raise the column for
+        # everything under it — the unsafe direction.
         n = 0
         while (substr(p, n + 1, 1) ~ /^[0-9]$/) n++
-        if (n > 0) {
+        if (n > 0 && n <= 9) {
             c = substr(p, n + 1, 1)
             if (c == "." || c == ")") w = n + 1
         }

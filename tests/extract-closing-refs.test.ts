@@ -216,6 +216,14 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             expect(stars.issues).toEqual(['7', '100']);
         });
 
+        test('an ordered marker longer than 9 digits is not a list item', async () => {
+            // CommonMark caps ordered markers at 9 digits, so this is a
+            // paragraph. Accepting it pushes a container that raises the column
+            // for everything indented under it — the unsafe direction.
+            const { issues } = await extract('1234567890. outer\n            ```\n            Closes #100\n            ```\nCloses #7\n');
+            expect(issues).toEqual(['7', '100']);
+        });
+
         test('a marker followed only by whitespace puts content one column past it', async () => {
             // An empty list item, per CommonMark — counting the trailing spaces
             // instead would raise the column and open the code block below.
@@ -270,9 +278,10 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
     });
 
     describe('documented gaps', () => {
-        // These leak a reference rather than hide one — the safer direction. They
-        // are pinned so the behavior can't drift silently; see the header comment
-        // in scripts/extract-closing-refs.sh.
+        // Most of these leak a reference rather than hide one — the safer
+        // direction. The two that can hide one are pinned last, and say so. All
+        // of them are here so the behavior can't drift silently; see the header
+        // comment in scripts/extract-closing-refs.sh.
 
         test('an indented code block is not stripped', async () => {
             // The fix models indented code (that is how a fence marker at 4+
@@ -297,6 +306,27 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
         test('blockquotes are not stripped', async () => {
             const { issues } = await extract('> Closes #7\n');
             expect(issues).toEqual(['7']);
+        });
+
+        test('a setext underline hides the indented code beneath it — and is silent', async () => {
+            // HIDES a reference. A heading underlined with a bare lone `-` needs
+            // previous-line state to tell from a list item, so it pushes a
+            // container, and the indented code under it opens as a fence instead
+            // of staying visible. Narrow (`--` and `---` both take other paths)
+            // but this is one of the two shapes nothing else flags.
+            const { issues, stderr } = await extract('Title\n-\n\n    ```\n    Closes #1\n    ```\n');
+            expect(issues).toEqual([]);
+            expect(stderr).toBe('');
+        });
+
+        test('a fence closed after an early close hides the rest — but warns', async () => {
+            // HIDES a reference. Flush-left code under a bullet dedents out of
+            // the item, so the fence ends early and its real closer opens a
+            // second one over the remainder. CommonMark agrees the reference is
+            // code here, and the unterminated warning fires, so it stays audible.
+            const { issues, stderr } = await extract('- Steps:\n  ```bash\nnpm install\n  ```\n\nCloses #7\n');
+            expect(issues).toEqual([]);
+            expect(stderr).toContain('unterminated code fence');
         });
     });
 
