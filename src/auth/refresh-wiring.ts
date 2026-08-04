@@ -18,7 +18,9 @@ export interface RefreshWiring {
 /**
  * Decides the session-auth merge and refresh-retry wiring shared by both
  * cli-builder.ts client-construction sites (the createCli routine-runtime path
- * and the run() path). Kept pure so both sites stay in lockstep (#135).
+ * and the run() path). Shared by both sites so they stay in lockstep (#135);
+ * the only side effect is a diagnostic console.warn on a suspicious sessionAuth
+ * block (see below).
  *
  * `options.refreshOn` (from CliOptions / .apijack/settings.json) takes
  * precedence over `sessionAuth.refreshOn`, so a project can opt a custom
@@ -37,9 +39,20 @@ export function resolveRefreshWiring(
     const refreshOn = options.refreshOn ?? rawSessionAuth?.refreshOn;
 
     if (rawSessionAuth && !mergedSessionAuth) {
-        console.warn(
-            '[apijack] sessionAuth is set but missing session.endpoint — SessionAuthStrategy will not be used.',
+        // An endpoint-less block that carries nothing but `refreshOn` is a deliberate,
+        // supported config (#135) — refreshOn survives the narrowing above precisely so
+        // this works without a session.endpoint. Only warn when there's something else
+        // in the block, which is the signature of a typo'd handshake key (e.g. `sessions:`
+        // instead of `session:`) rather than an intentional refresh-only block.
+        const foundKeys = Object.keys(rawSessionAuth).filter(
+            key => key !== 'refreshOn' && (rawSessionAuth as Record<string, unknown>)[key] !== undefined,
         );
+
+        if (foundKeys.length > 0) {
+            console.warn(
+                `[apijack] sessionAuth is set but missing session.endpoint — SessionAuthStrategy will not be used. Found: ${foundKeys.join(', ')}.`,
+            );
+        }
     }
 
     return { mergedSessionAuth, refreshOn };

@@ -50,17 +50,12 @@ describe('resolveRefreshWiring', () => {
         // Not expressible through the SessionAuthConfig type from a fully-typed
         // caller, but envConfig.sessionAuth is only a Partial<SessionAuthConfig> —
         // a JS/dynamic caller could still hand cli-builder a refreshOn-only block.
-        const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
         const refreshOnlySessionAuth = { refreshOn: [401] } as unknown as SessionAuthConfig;
 
-        try {
-            const result = resolveRefreshWiring({ sessionAuth: refreshOnlySessionAuth }, undefined);
-            expect(result.mergedSessionAuth).toBeUndefined();
-            // refreshOn still surfaces from the raw (unguarded) merge.
-            expect(result.refreshOn).toEqual([401]);
-        } finally {
-            warnSpy.mockRestore();
-        }
+        const result = resolveRefreshWiring({ sessionAuth: refreshOnlySessionAuth }, undefined);
+        expect(result.mergedSessionAuth).toBeUndefined();
+        // refreshOn still surfaces from the raw (unguarded) merge.
+        expect(result.refreshOn).toEqual([401]);
     });
 
     test('does not mutate inputs', () => {
@@ -73,14 +68,44 @@ describe('resolveRefreshWiring', () => {
     });
 
     describe('missing session.endpoint diagnostic warning', () => {
-        test('warns when sessionAuth is set but has no session.endpoint', () => {
+        test('is silent for a deliberate refreshOn-only sessionAuth block (#135, #148)', () => {
             const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
             const refreshOnlySessionAuth = { refreshOn: [401] } as unknown as SessionAuthConfig;
 
             try {
-                resolveRefreshWiring({ sessionAuth: refreshOnlySessionAuth }, undefined);
+                const result = resolveRefreshWiring({ sessionAuth: refreshOnlySessionAuth }, undefined);
+                expect(warnSpy).not.toHaveBeenCalled();
+                // refreshOn behavior from #135 is unchanged: it still surfaces from the
+                // raw (unguarded) merge even though mergedSessionAuth stays undefined.
+                expect(result.mergedSessionAuth).toBeUndefined();
+                expect(result.refreshOn).toEqual([401]);
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
+
+        test('warns and names the found keys for a block with a typo\'d handshake key', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+            // `sessions:` instead of `session:` — the block has handshake-shaped keys
+            // but no reachable session.endpoint, which is the case the warning targets.
+            const typoSessionAuth = {
+                sessions: { endpoint: '/session' },
+                cookies: { extract: ['SESSION'], applyTo: ['POST'] },
+                refreshOn: [401],
+            } as unknown as SessionAuthConfig;
+
+            try {
+                const result = resolveRefreshWiring({ sessionAuth: typoSessionAuth }, undefined);
                 expect(warnSpy).toHaveBeenCalledTimes(1);
-                expect(warnSpy.mock.calls[0]![0]).toContain('session.endpoint');
+                const message = warnSpy.mock.calls[0]![0] as string;
+                expect(message).toContain('session.endpoint');
+                expect(message).toContain('sessions');
+                expect(message).toContain('cookies');
+                expect(message).not.toContain('refreshOn');
+                // refreshOn behavior from #135 is unchanged: still surfaces even though
+                // mergedSessionAuth stays undefined for the typo'd block.
+                expect(result.mergedSessionAuth).toBeUndefined();
+                expect(result.refreshOn).toEqual([401]);
             } finally {
                 warnSpy.mockRestore();
             }
