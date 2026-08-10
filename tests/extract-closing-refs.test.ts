@@ -328,9 +328,12 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             // prev_text = 1 anyway and suppresses the empty marker below it. The
             // fence indented into what CommonMark calls that list item keeps a
             // lower fence_base and never ends at the dedent, so `Closes #7`
-            // is swallowed with no unterminated-fence warning. dev has the
-            // symmetric defect here: it reports #7 AND fires a spurious
-            // unterminated-fence warning, since CommonMark agrees the ref is code.
+            // is swallowed with no unterminated-fence warning. On this shape
+            // dev was CommonMark-correct on both counts — the flush-left line
+            // ends the item and its fence, so it printed #7 and warned about
+            // the genuinely unterminated fence the trailing line opens.
+            // Accepted anyway: the shape is contrived, and #157 tracks
+            // narrowing prev_text so the marker reads as a real item again.
             const { issues, stderr, exitCode } = await extract('# Title\n-\n  ```\n  code\nCloses #7\n  ```\n');
             expect(issues).toEqual([]);
             expect(stderr).toBe('');
