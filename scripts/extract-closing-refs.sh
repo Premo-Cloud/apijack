@@ -46,8 +46,8 @@
 #
 # Known and deliberate gaps. Most leave a reference VISIBLE (a possible false
 # positive) rather than hiding a real one, which is the safer direction to err —
-# the two that can hide one, the early-close reopen above and the setext
-# underline below, say so where they are described:
+# the one that can hide one, the early-close reopen above, says so where it is
+# described:
 #   - indented code blocks and blockquotes are not stripped (per #129: a
 #     blockquote can legitimately carry a real reference)
 #   - code spans are scanned per line, so a span that wraps across a newline
@@ -62,9 +62,6 @@
 #     container early, which only lowers the column a fence must beat
 #   - a fence opener sharing a line with its list marker (`- ```) is not seen,
 #     because the opener is looked for at the line indent, not past the marker
-#   - a setext heading underline (`Title` over a bare `-`) reads as a list item
-#     and pushes a container, since detecting it needs previous-line state; the
-#     container it pushes can open indented code under it as a fence
 #
 # Network-free by design: it takes text, not a PR number. Callers do their own
 # fetching, which differs between them for good reasons (the label scripts hit
@@ -211,7 +208,7 @@ function list_offset(p,   w, n, c, t) {
 
 BEGIN {
     in_fence = 0; fence_char = ""; fence_len = 0; fence_indent = 0; fence_base = 0
-    depth = 0; base = 0
+    depth = 0; base = 0; prev_text = 0
 }
 {
     # Leading spaces, counted with a loop rather than /^ */ because the count is
@@ -242,6 +239,7 @@ BEGIN {
                     fence_indent = 0; fence_base = 0
                 }
             }
+            prev_text = 0
             next
         }
         # Dedented out of the list item holding the fence, so the fence ended
@@ -251,11 +249,13 @@ BEGIN {
         fence_indent = 0; fence_base = 0
     }
 
+    no_para = 0
     if (!blank) {
         # A list item may contain blank lines, so only a non-blank line closes
         # containers. Popping eagerly lowers base, which makes a deep fence
         # LESS likely to be recognized — the false-positive direction.
-        while (depth > 0 && indent < stack[depth]) depth--
+        popped = 0
+        while (depth > 0 && indent < stack[depth]) { depth--; popped = 1 }
         base = 0
         if (depth > 0) base = stack[depth]
 
@@ -267,9 +267,22 @@ BEGIN {
         if (indent <= base + 3) {
             off = list_offset(probe)
             if (off > 0) {
-                depth++
-                stack[depth] = indent + off
-                base = stack[depth]
+                # An empty marker right after open paragraph text never starts
+                # a list item (#142): for `-` it is a setext underline, for the
+                # rest a lazy continuation ("an empty list item cannot
+                # interrupt a paragraph"). The one exception is a marker that
+                # dedented to pop a container on its way in — that is a real
+                # sibling empty item (`- foo` then `-` at column 0), told
+                # apart here by `popped`.
+                empty_marker = (probe ~ /^([-*+]|[0-9]+[.)])[[:space:]]*$/)
+                if (empty_marker && prev_text && !popped) {
+                    no_para = 1
+                } else {
+                    depth++
+                    stack[depth] = indent + off
+                    base = stack[depth]
+                    if (empty_marker) no_para = 1
+                }
             } else if (match(probe, /^(```+|~~~+)/)) {
                 ch = substr(probe, 1, 1)
                 # A backtick info string cannot itself contain a backtick, so
@@ -277,12 +290,14 @@ BEGIN {
                 if (ch != "`" || index(substr(probe, RLENGTH + 1), "`") == 0) {
                     in_fence = 1; fence_char = ch; fence_len = RLENGTH
                     fence_indent = indent; fence_base = base
+                    prev_text = 0
                     next
                 }
             }
         }
     }
     print strip_spans($0)
+    prev_text = (!blank && !no_para)
 }
 
 # A closing fence cannot carry a trailing info string, so one stray character on
