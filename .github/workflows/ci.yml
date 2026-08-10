@@ -16,6 +16,7 @@ on:
       - '.github/workflows/ci.yml'
       - 'scripts/**'
       - '.claude/skills/**/scripts/**'
+      - '.claude-jobs/**'
 
 jobs:
   lint:
@@ -69,13 +70,25 @@ jobs:
             exit 1
           fi
 
+          job_files=(.claude-jobs/**/*.sh)
+          if [ "${#job_files[@]}" -eq 0 ]; then
+            echo "::error::.claude-jobs/**/*.sh matched no files"
+            exit 1
+          fi
+
+          test_files=(tests/**/*.sh)
+          if [ "${#test_files[@]}" -eq 0 ]; then
+            echo "::error::tests/**/*.sh matched no files"
+            exit 1
+          fi
+
           # shellcheck is silent when clean, so without this the log records no
           # evidence of WHAT was checked. It also surfaces a partial-coverage
-          # regression that leaves both groups non-empty — the case the guards
+          # regression that leaves all groups non-empty — the case the guards
           # above cannot see.
-          echo "shellcheck: ${#script_files[@]} in scripts/, ${#skill_files[@]} in .claude/skills/"
+          echo "shellcheck: ${#script_files[@]} in scripts/, ${#skill_files[@]} in .claude/skills/, ${#job_files[@]} in .claude-jobs/, ${#test_files[@]} in tests/"
 
-          shellcheck --severity=warning "${script_files[@]}" "${skill_files[@]}"
+          shellcheck --severity=warning "${script_files[@]}" "${skill_files[@]}" "${job_files[@]}" "${test_files[@]}"
 
   unit-tests:
     strategy:
