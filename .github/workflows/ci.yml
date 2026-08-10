@@ -16,6 +16,7 @@ on:
       - '.github/workflows/ci.yml'
       - 'scripts/**'
       - '.claude/skills/**/scripts/**'
+      - '.claude-jobs/**'
 
 jobs:
   lint:
