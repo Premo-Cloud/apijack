@@ -641,6 +641,8 @@ export function createCli(options: CliOptions): Cli {
             }
 
             // 9. Create ApiClient and register generated commands
+            let generatedCommandsRegistered = false;
+
             if (commandsModule && ApiClientClass) {
                 const registerFn = commandsModule.registerGeneratedCommands as (
                     program: Command, client: unknown, onResult: (result: unknown) => void,
@@ -745,6 +747,7 @@ export function createCli(options: CliOptions): Cli {
                 };
 
                 registerFn(program, client, onResult);
+                generatedCommandsRegistered = true;
             }
 
             // 10. Register consumer commands and attach per-command requiresAuth preAction hooks.
@@ -960,10 +963,9 @@ export function createCli(options: CliOptions): Cli {
                     process.argv.slice(2),
                     aliasMap,
                     realPaths,
-                    // Mirrors the registration condition above — an existing client
-                    // module that doesn't export ApiClient leaves ApiClientClass
-                    // `undefined`, not `null`.
-                    { generatedCommandsPresent: !!commandsModule && !!ApiClientClass },
+                    // Set iff generated-command registration actually ran, so this
+                    // guard cannot diverge from the registration condition above.
+                    { generatedCommandsPresent: generatedCommandsRegistered },
                 );
 
                 for (const w of warnings) {

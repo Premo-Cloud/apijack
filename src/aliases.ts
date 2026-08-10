@@ -160,7 +160,8 @@ export interface RewriteResult {
  *   (error emitted, CLI continues without the alias) -- unless
  *   `opts.generatedCommandsPresent` is `false`, in which case they are skipped
  *   silently, since there is nothing meaningful to validate against before
- *   `generate` has run.
+ *   `generate` has run, or if it ran incompletely (generated command
+ *   registration didn't actually complete).
  * - Longest-prefix wins: multi-token aliases are matched before shorter ones.
  * - Trailing args (positional and flags) are appended verbatim.
  */
