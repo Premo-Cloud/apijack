@@ -4,12 +4,15 @@ set -euo pipefail
 source "$(git rev-parse --show-toplevel)/scripts/gh-pin-account.sh"
 
 # ship.sh — Automates the dev→main shipping pipeline
-# Usage: ./scripts/ship.sh
+# Usage: ./scripts/ship.sh [--bump major|minor|patch]
 #
 # Assumes:
 # - You're on the dev branch with committed changes
 # - gh CLI is authenticated
 # - Changes have been tested locally (bun test + bun run lint)
+#
+# --bump overrides the conventional-commit scan in Step 2b. It may only RAISE
+# the computed level, never lower it.
 
 BLUE='\033[0;34m'
 GREEN='\033[0;32m'
@@ -21,6 +24,55 @@ info()  { echo -e "${BLUE}▸${NC} $1"; }
 ok()    { echo -e "${GREEN}✓${NC} $1"; }
 fail()  { echo -e "${RED}✗${NC} $1"; }
 warn()  { echo -e "${YELLOW}!${NC} $1"; }
+
+usage() { echo "Usage: ./scripts/ship.sh [--bump major|minor|patch]"; }
+
+# Rank bump levels so a --bump override can be compared against the scan result.
+bump_rank() {
+    case "$1" in
+        patch) echo 0 ;;
+        minor) echo 1 ;;
+        major) echo 2 ;;
+        *)     echo -1 ;;
+    esac
+}
+
+# ── Arguments ─────────────────────────────────────────────────────
+BUMP_OVERRIDE=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --bump)
+            if [ $# -lt 2 ]; then
+                fail "--bump needs a level: major, minor, or patch."
+                usage
+                exit 2
+            fi
+            BUMP_OVERRIDE="$2"
+            shift 2
+            ;;
+        --bump=*)
+            BUMP_OVERRIDE="${1#*=}"
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            fail "Unknown argument: $1"
+            usage
+            exit 2
+            ;;
+    esac
+done
+
+case "$BUMP_OVERRIDE" in
+    ""|major|minor|patch) ;;
+    *)
+        fail "--bump must be one of: major, minor, patch (got '$BUMP_OVERRIDE')."
+        exit 2
+        ;;
+esac
 
 # Promote issues closed by the release PR to `deployed`. Called from both the
 # published and the no-publish-needed paths — the PR is merged to main by the
@@ -217,6 +269,29 @@ elif echo "$COMMIT_SUBJECTS" | grep -qE "^feat[(:]"; then
     BUMP_LEVEL="minor"
 else
     BUMP_LEVEL="patch"
+fi
+
+# --bump override. The scan reads commit *prefixes*, which are only a proxy for
+# semver impact and can under-call it: a `fix:` commit whose fix was to add a
+# new public option is a minor, not a patch (v1.16.0 / apijack#135 — the issue
+# was labeled `bug`, so every commit took a `fix:` subject, while the fix itself
+# added `CliOptions.refreshOn`).
+#
+# The override may only RAISE the level. Allowing a downgrade would let a real
+# `BREAKING CHANGE:` footer ship as a patch — the mirror image of the apijack#59
+# misship, and a worse failure, since under-versioning breaks consumers silently.
+if [ -n "$BUMP_OVERRIDE" ]; then
+    if [ "$(bump_rank "$BUMP_OVERRIDE")" -lt "$(bump_rank "$BUMP_LEVEL")" ]; then
+        fail "--bump $BUMP_OVERRIDE is lower than the detected $BUMP_LEVEL bump."
+        warn "The override may only raise the level. Ship $BUMP_LEVEL, or fix the commits."
+        exit 1
+    fi
+    if [ "$BUMP_OVERRIDE" = "$BUMP_LEVEL" ]; then
+        info "--bump $BUMP_OVERRIDE matches the detected level."
+    else
+        warn "--bump $BUMP_OVERRIDE overrides the detected $BUMP_LEVEL bump."
+    fi
+    BUMP_LEVEL="$BUMP_OVERRIDE"
 fi
 
 # Major-bump safeguard. The v2.0.0 misship (apijack#59) shipped a major bump
