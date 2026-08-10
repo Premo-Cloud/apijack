@@ -120,6 +120,7 @@ if (!authResolved) {
 
 // 7. Resolve sessionAuth from env config
 let sessionAuth: SessionAuthConfig | undefined;
+let onChallengeInjectedFrom: string | undefined;
 {
     const env = getActiveEnvConfig(CLI_NAME, { configPath: join(configDir, 'config.json') });
 
@@ -129,6 +130,7 @@ let sessionAuth: SessionAuthConfig | undefined;
 
     if (sessionAuth && projectOnChallenge) {
         sessionAuth.onChallenge = projectOnChallenge;
+        onChallengeInjectedFrom = '.apijack/auth.ts';
     }
 }
 
@@ -150,6 +152,7 @@ const cli = createCli({
     specPath,
     auth: authStrategy,
     sessionAuth,
+    onChallengeInjectedFrom,
     refreshOn: projectSettings.auth?.refreshOn,
     generatedDir,
     allowedCidrs: projectConfig?.allowedCidrs,

@@ -134,12 +134,14 @@ export async function runRoutine(
     }
 
     let sessionAuth: SessionAuthConfig | undefined;
+    let onChallengeInjectedFrom: string | undefined;
 
     if (envConfig) {
         sessionAuth = (envConfig as Record<string, unknown>).sessionAuth as SessionAuthConfig | undefined;
 
         if (sessionAuth && projectOnChallenge) {
             sessionAuth.onChallenge = projectOnChallenge;
+            onChallengeInjectedFrom = '.apijack/auth.ts';
         }
     }
 
@@ -156,6 +158,7 @@ export async function runRoutine(
         specPath,
         auth: authStrategy,
         sessionAuth,
+        onChallengeInjectedFrom,
         generatedDir,
         allowedCidrs: projectConfig?.allowedCidrs,
         configPath: join(configDir, 'config.json'),
