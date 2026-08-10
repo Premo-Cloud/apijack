@@ -147,10 +147,14 @@ ship.sh will:
 2. Find the existing PR (won't overwrite the curated title/body)
 3. Wait for CI
 4. Merge via `gh pr merge --merge --admin`
-5. Watch the publish workflow
-6. Sync main and rebase dev
+5. Tag the merge commit `vX.Y.Z` and push the tag — the tag push is what triggers `publish.yml`; merging alone never publishes
+6. Watch the publish workflow
+7. Promote every issue closed by the release to `deployed`, stripping the now-stale `ready-for-implement` and `merged to dev` (via `scripts/promote-shipped-issues.sh`, driven by the `Closes #N` lines from step 2)
+8. Sync main and rebase dev
 
-If ship.sh fails at any step, it prints what to do. Fix on dev, commit, re-run — it picks up where it left off.
+Step 7 is why the `Closes #N` lines matter twice over: they auto-close the issues *and* drive the label promotion. A release that closes no issues is a clean no-op. Labelling never aborts a ship — the release is already published by then, so a failure only warns.
+
+If ship.sh fails at any step, it prints what to do. Fix on dev, commit, re-run — it picks up where it left off. That includes the post-merge window: if a run dies after merging but before the tag is pushed, main is bumped but nothing is published. Preflight checks for that state on every run — main's version having no matching tag, with a merged dev → main PR behind it — and finishes the release before considering new work.
 
 ## Red Flags
 

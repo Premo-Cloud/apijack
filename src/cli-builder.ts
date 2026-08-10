@@ -30,7 +30,8 @@ import { registerRoutineCommand, loadBuiltinRoutines } from './commands/routine/
 import { prompt, hiddenPrompt } from './prompt';
 import { SessionAuthStrategy } from './auth/session-auth';
 import { resolveRequestHeaders } from './auth/resolve-headers';
-import { deepMergeSessionAuth } from './auth/config-merge';
+import { resolveRefreshWiring } from './auth/refresh-wiring';
+import type { SessionAuthConfig } from './auth/types';
 import { loadPreRequestHook } from './pre-request';
 import type { RoutineResult } from './routine/executor';
 import { executeRoutine } from './routine/executor';
@@ -195,9 +196,7 @@ export function createCli(options: CliOptions): Cli {
 
         // 3. Compute auth strategy + sessionMgr.
         const envConfig = getActiveEnvConfig(cliName, configOpts);
-        const mergedSessionAuth = options.sessionAuth
-            ? deepMergeSessionAuth(options.sessionAuth, envConfig?.sessionAuth)
-            : undefined;
+        const { mergedSessionAuth, refreshOn } = resolveRefreshWiring(options, envConfig);
         const strategy = mergedSessionAuth
             ? new SessionAuthStrategy(options.auth, mergedSessionAuth)
             : options.auth;
@@ -255,8 +254,8 @@ export function createCli(options: CliOptions): Cli {
             const client = new ApiClientClass(
                 resolved.baseUrl ?? '',
                 getHeaders,
-                mergedSessionAuth ? async () => { await ctx.refreshSession(); } : undefined,
-                mergedSessionAuth?.refreshOn,
+                async () => { await ctx.refreshSession(); },
+                refreshOn,
             ) as Record<string, unknown>;
 
             ctx.client = client;
@@ -543,15 +542,14 @@ export function createCli(options: CliOptions): Cli {
             }
 
             // 5. Compute auth strategy (no network — just config)
-            let mergedSessionAuth: ReturnType<typeof deepMergeSessionAuth> | undefined;
+            let mergedSessionAuth: SessionAuthConfig | undefined;
+            let refreshOn: number[] | undefined;
             let strategy = options.auth;
             let sessionMgr: SessionManager | null = null;
 
             if (resolved) {
                 const envConfig = getActiveEnvConfig(cliName, configOpts);
-                mergedSessionAuth = options.sessionAuth
-                    ? deepMergeSessionAuth(options.sessionAuth, envConfig?.sessionAuth)
-                    : undefined;
+                ({ mergedSessionAuth, refreshOn } = resolveRefreshWiring(options, envConfig));
                 strategy = mergedSessionAuth
                     ? new SessionAuthStrategy(options.auth, mergedSessionAuth)
                     : options.auth;
@@ -656,8 +654,8 @@ export function createCli(options: CliOptions): Cli {
                 const client = new ApiClientClass(
                     resolved?.baseUrl ?? '',
                     getHeaders,
-                    mergedSessionAuth ? async () => { await ctx!.refreshSession(); } : undefined,
-                    mergedSessionAuth?.refreshOn,
+                    ctx ? async () => { await ctx!.refreshSession(); } : undefined,
+                    refreshOn,
                 ) as Record<string, unknown>;
 
                 if (ctx) ctx.client = client;
@@ -949,7 +947,10 @@ export function createCli(options: CliOptions): Cli {
 
             // 13. Apply project-local aliases (.apijack/aliases.json) by rewriting argv
             // before Commander parses. Real command paths always win over aliases;
-            // expansions that don't resolve to a known command are skipped with an error.
+            // expansions that don't resolve to a known command are skipped with an error
+            // — unless codegen hasn't run yet (or ran incompletely), in which case
+            // there's nothing meaningful to validate against and unresolved expansions
+            // are skipped silently.
             // The map was already loaded at the top of run() for early best-effort
             // resolution of pre-build argv reads — we reuse it here for the validated
             // rewrite now that the full Commander tree exists.
@@ -959,6 +960,10 @@ export function createCli(options: CliOptions): Cli {
                     process.argv.slice(2),
                     aliasMap,
                     realPaths,
+                    // Mirrors the registration condition above — an existing client
+                    // module that doesn't export ApiClient leaves ApiClientClass
+                    // `undefined`, not `null`.
+                    { generatedCommandsPresent: !!commandsModule && !!ApiClientClass },
                 );
 
                 for (const w of warnings) {

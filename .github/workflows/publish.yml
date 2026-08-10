@@ -2,17 +2,30 @@ name: Publish
 
 on:
   push:
-    branches: [main, next]
+    branches: [next]
+    # Stable releases are armed by an explicit tag push, never by a branch push.
+    # Kept broad on purpose — a glob too strict to match a real release tag
+    # would fail silently at ship time. Prerelease tags are excluded in the
+    # job's `if:` below, where the expression semantics are unambiguous.
+    tags: ['v*']
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     environment: release
-    # Only publish stable releases from main when a version bump commit is in the push
-    if: "github.ref == 'refs/heads/main' && (contains(github.event.head_commit.message, 'chore(release):') || contains(toJSON(github.event.commits.*.message), 'chore(release):'))"
+    # Release intent lives out-of-band in the tag — it cannot be spelled
+    # accidentally in a commit message, a revert, or a doc that quotes the
+    # release convention. See #128.
+    #
+    # The `-` exclusion keeps the `v1.16.0-next.0` tags that `publish-next`
+    # creates via `gh release create` from arming a stable publish. Those tags
+    # are made with GITHUB_TOKEN, which does not trigger workflows today — this
+    # is the explicit gate rather than a dependency on that behaviour holding.
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-')
     permissions:
       contents: write
       id-token: write
+      issues: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -38,28 +51,30 @@ jobs:
       # Verify pack works
       - run: npm pack --dry-run
 
-      # Create git tag from package.json version
-      - name: Tag release
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          VERSION=$(node -p "require('./package.json').version")
-          git tag -a "v$VERSION" -m "v$VERSION"
-          git push --tags
-
-      # Create GitHub release. Prefer the merged PR's body (the curated release
-      # notes drafted by the ship-release skill — see PRs #36, #40, #45 for the
-      # template). Fall back to a commit summary only if no PR is associated
-      # with the push (e.g., a direct push to main).
+      # Create GitHub release. The tag already exists — ship.sh created it on
+      # the merge commit and pushing it is what triggered this run. Prefer the
+      # merged PR's body (the curated release notes drafted by the ship-release
+      # skill — see PRs #36, #40, #45 for the template). Fall back to a commit
+      # summary only if no PR is associated with the tagged commit.
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
+
+          # The tag is now the input that armed this run, so it is a second
+          # source of truth alongside package.json. ship.sh keeps them in step;
+          # a hand-pushed tag might not, and a mismatch would create a stray
+          # second tag here and then collide in npm publish. Fail loudly first.
+          if [ "${{ github.ref_name }}" != "v$VERSION" ]; then
+              echo "::error::Tag ${{ github.ref_name }} does not match package.json version $VERSION"
+              exit 1
+          fi
+
           BODY_FILE=$(mktemp)
 
-          # The push that triggered this run is the merge commit on main. Its
-          # associated PR is the dev → main release PR.
+          # github.sha is the commit the tag points at — the merge commit on
+          # main. Its associated PR is the dev → main release PR.
           PR_BODY=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
               --jq '.[0].body // empty' 2>/dev/null || true)
 
@@ -76,14 +91,36 @@ jobs:
                   "$COMMITS" "${PREV_TAG:-main}" "$VERSION" > "$BODY_FILE"
           fi
 
-          gh release create "v$VERSION" \
-              --title "v$VERSION" \
-              --notes-file "$BODY_FILE"
+          # Idempotent: re-running this workflow after a failed npm publish must
+          # not die here because the release already exists.
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+              gh release edit "v$VERSION" \
+                  --title "v$VERSION" \
+                  --notes-file "$BODY_FILE"
+          else
+              gh release create "v$VERSION" \
+                  --title "v$VERSION" \
+                  --notes-file "$BODY_FILE"
+          fi
           rm -f "$BODY_FILE"
 
       # Publish to npm via trusted publishing (OIDC — no token needed)
       - name: Publish to npm
         run: npm publish
+
+      # This used to be a separate `release: published` workflow, but a
+      # release created with GITHUB_TOKEN (as above) never raises that
+      # event — the workflow existed for several releases and recorded zero
+      # runs. Running the notify logic inline, after publish, is what
+      # actually fires. See #133.
+      - name: Notify shipped issues
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          RELEASE_URL=$(gh release view "${{ github.ref_name }}" --json url --jq .url)
+          scripts/notify-shipped-issues.sh "${{ github.ref_name }}" "$RELEASE_URL"
 
   publish-next:
     runs-on: ubuntu-latest

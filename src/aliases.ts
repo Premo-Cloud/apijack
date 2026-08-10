@@ -157,7 +157,10 @@ export interface RewriteResult {
  * - Aliases that match a real command path are skipped (warning emitted, real
  *   command keeps winning).
  * - Aliases whose expansion does not resolve to a real command path are skipped
- *   (error emitted, CLI continues without the alias).
+ *   (error emitted, CLI continues without the alias) -- unless
+ *   `opts.generatedCommandsPresent` is `false`, in which case they are skipped
+ *   silently, since there is nothing meaningful to validate against before
+ *   `generate` has run.
  * - Longest-prefix wins: multi-token aliases are matched before shorter ones.
  * - Trailing args (positional and flags) are appended verbatim.
  */
@@ -165,7 +168,9 @@ export function rewriteArgv(
     args: string[],
     aliases: AliasMap,
     realPaths: Set<string>,
+    opts?: { generatedCommandsPresent?: boolean },
 ): RewriteResult {
+    const generatedCommandsPresent = opts?.generatedCommandsPresent ?? true;
     const warnings: string[] = [];
     const errors: string[] = [];
     const valid = new Map<string, string[]>();
@@ -179,9 +184,12 @@ export function rewriteArgv(
         }
 
         if (!realPaths.has(expansion)) {
-            errors.push(
-                `alias "${alias}" → "${expansion}" does not resolve to a known command`,
-            );
+            if (generatedCommandsPresent) {
+                errors.push(
+                    `alias "${alias}" → "${expansion}" does not resolve to a known command`,
+                );
+            }
+
             continue;
         }
 

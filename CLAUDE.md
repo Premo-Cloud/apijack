@@ -214,7 +214,17 @@ new SessionAuthStrategy(new BasicAuthStrategy(), {
 });
 ```
 
-When the generated client receives a status in `refreshOn`, it calls the wired refresh callback — which invalidates the cached session and re-bootstraps `/session` — then retries the original request once. Capped at one retry. Strategies that don't use `/session` are unaffected (the field is ignored).
+When the generated client receives a status in `refreshOn`, it calls the wired refresh callback — which invalidates the cached session and re-bootstraps `/session` — then retries the original request once. Capped at one retry. Wrapping the strategy in `SessionAuthStrategy` requires a `session.endpoint`, but `refreshOn` itself doesn't — see below for the route that works without one.
+
+`refreshOn` isn't limited to `SessionAuthStrategy` — a project on a custom `AuthStrategy` (`.apijack/auth.ts`) can opt in without a `sessionAuth` block at all, via `.apijack/settings.json`:
+
+```json
+{ "auth": { "refreshOn": [401] } }
+```
+
+The refresh callback re-invokes the custom strategy's `authenticate()` rather than re-bootstrapping `/session`. `settings.json` `auth.refreshOn` takes precedence over `sessionAuth.refreshOn` when both are set.
+
+`.apijack/settings.json` only applies to consumers of the shared `apijack` binary; a project with its own `bin/<cli>.ts` sets the same option programmatically instead: `createCli({ refreshOn: [401], /* ... */ })`.
 
 ### Dropping base-strategy headers post-handshake (opt-in)
 
@@ -242,7 +252,7 @@ The `.apijack/` directory at a project root is auto-loaded when the CLI runs ins
 | `.apijack/auth.ts` | Project-level `AuthStrategy` and optional `onChallenge` |
 | `.apijack/plugins.ts` | Project-level plugin registrations (`default: ApijackPlugin[]` — each entry passed to `cli.use(...)`) |
 | `.apijack/routines/*.yaml` | Routines available via `routine run <name>` |
-| `.apijack/settings.json` | Framework defaults (see below) |
+| `.apijack/settings.json` | Framework defaults (see below; also `auth.refreshOn` — see "Stale-session refresh and retry" above) |
 | `.apijack/aliases.json` | Project-local command aliases (see below) |
 
 ### Command aliases
@@ -265,6 +275,7 @@ Resolution rules:
 - Longest-prefix wins when multiple aliases could match.
 - An alias that shadows a real command path emits a startup warning and the real command keeps winning.
 - An expansion that doesn't resolve to a known command emits a startup error; the CLI continues without that alias applied.
+- Before `generate` has run (no generated commands registered), unresolved expansions are skipped silently instead — there is nothing meaningful to validate against yet.
 - A global `~/.<cliName>/aliases.json` is also consulted; project-local entries override global entries on conflict.
 - **Routines and MCP tool resolution use canonical names only.** Aliases are a CLI ergonomics layer; routine YAML and MCP tool names are not affected.
 

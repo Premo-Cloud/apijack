@@ -29,6 +29,11 @@ export interface CliOptions {
     specPath: string;
     auth: AuthStrategy;
     sessionAuth?: SessionAuthConfig;
+    /** HTTP statuses that trigger a one-shot session refresh + retry on the
+     *  generated client, for ANY auth strategy (not just SessionAuthStrategy).
+     *  Takes precedence over `sessionAuth.refreshOn` when both are set. Lets a
+     *  project with a custom AuthStrategy opt in without a `sessionAuth` block. */
+    refreshOn?: number[];
     outputModes?: string[];
     generatedDir?: string;
     knownSites?: Record<string, { url: string; description: string; group?: string }>;
