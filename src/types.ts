@@ -34,6 +34,10 @@ export interface CliOptions {
      *  Takes precedence over `sessionAuth.refreshOn` when both are set. Lets a
      *  project with a custom AuthStrategy opt in without a `sessionAuth` block. */
     refreshOn?: number[];
+    /** Set by the shared-binary entry points when they inject a project-level
+     *  `onChallenge` (from `.apijack/auth.ts`) into `sessionAuth`. Used only to
+     *  attribute the injected key in the endpoint-less sessionAuth diagnostic. */
+    onChallengeInjectedFrom?: string;
     outputModes?: string[];
     generatedDir?: string;
     knownSites?: Record<string, { url: string; description: string; group?: string }>;
