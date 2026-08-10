@@ -22,6 +22,15 @@
 # block or inline code span is now excluded, via
 # extract-closing-refs.sh --bare-refs.
 #
+# Known and deliberate gap: the entire commit range is piped as a single
+# document to extract-closing-refs.sh. An unterminated code fence in one
+# commit's body leaves the fence open for all subsequent commits in the range.
+# Until closed, extract-closing-refs.sh treats all content as code and strips
+# it from the scan, masking issue references in those commits. Probability is
+# low (requires odd fence count in a release range). Blast radius: missed
+# courtesy notifications, flagged by the "unterminated code fence" warning
+# extract-closing-refs.sh prints to stderr when the script runs.
+#
 # Usage:
 #   notify-shipped-issues.sh <tag> <release-url> [--dry-run]
 #
@@ -32,9 +41,10 @@
 # toplevel), so this can run from a checkout of a different repo — tests
 # exercise it against a throwaway fixture repo.
 #
-# Never aborts the caller: a failure to comment on one issue is logged to
-# stderr and the loop continues. Exits 0 unless the arguments themselves are
-# invalid.
+# Never aborts on per-issue comment failures: a failure to comment on one
+# issue is logged to stderr and the loop continues. Exits non-zero for
+# invalid arguments, broken revision ranges, or internal extractor failures;
+# per-issue failures do not abort the loop.
 
 set -euo pipefail
 
