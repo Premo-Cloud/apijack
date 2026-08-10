@@ -84,7 +84,7 @@ jobs:
 
           # shellcheck is silent when clean, so without this the log records no
           # evidence of WHAT was checked. It also surfaces a partial-coverage
-          # regression that leaves both groups non-empty — the case the guards
+          # regression that leaves all groups non-empty — the case the guards
           # above cannot see.
           echo "shellcheck: ${#script_files[@]} in scripts/, ${#skill_files[@]} in .claude/skills/, ${#job_files[@]} in .claude-jobs/, ${#test_files[@]} in tests/"
 
