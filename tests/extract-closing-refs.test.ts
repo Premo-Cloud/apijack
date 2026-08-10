@@ -41,6 +41,21 @@ async function extractFile(path: string): Promise<ExtractResult> {
     return { issues: stdout.split('\n').filter(Boolean), exitCode, stderr };
 }
 
+/** Same as `extract`, but with `--bare-refs` so ANY `#N` matches, not just keyword-prefixed ones. */
+async function extractBare(body: string): Promise<ExtractResult> {
+    const proc = Bun.spawn([scriptPath, '--bare-refs', '-'], {
+        cwd: repoRoot,
+        stdin: new TextEncoder().encode(body),
+        stdout: 'pipe',
+        stderr: 'pipe',
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const stderr = await new Response(proc.stderr).text();
+    const exitCode = await proc.exited;
+
+    return { issues: stdout.split('\n').filter(Boolean), exitCode, stderr };
+}
+
 // `bun test` runs on windows-latest in CI, where Bun can't exec a .sh directly
 // (ENOENT). The scripts under test are release automation — they run from a
 // maintainer's shell and from Linux CI, never on Windows. Invoking them through
@@ -460,6 +475,44 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
 
             expect(await proc.exited).toBe(0);
             expect(stdout.split('\n').filter(Boolean)).toEqual(['7']);
+        });
+    });
+
+    describe('--bare-refs mode', () => {
+        test('matches a bare #N with no closing keyword', async () => {
+            const { issues } = await extractBare('see #12 and #34');
+            expect(issues).toEqual(['12', '34']);
+        });
+
+        test('still matches keyword-prefixed refs', async () => {
+            const { issues } = await extractBare('Closes #5\nand #7');
+            expect(issues).toEqual(['5', '7']);
+        });
+
+        test('excludes refs inside a fenced block', async () => {
+            const { issues } = await extractBare('```\n#99\n```\nsee #3\n');
+            expect(issues).toEqual(['3']);
+        });
+
+        test('excludes refs inside an inline code span', async () => {
+            const { issues } = await extractBare('`prefixes #14` and `Discloses #15`. refs #16\n');
+            expect(issues).toEqual(['16']);
+        });
+
+        test('dedupes and sorts numerically', async () => {
+            const { issues } = await extractBare('#100 #9 #11 #9');
+            expect(issues).toEqual(['9', '11', '100']);
+        });
+
+        test('exits 0 with no output on a body with no refs', async () => {
+            const { issues, exitCode } = await extractBare('chore: bump deps\n\nNothing to see here.\n');
+            expect(issues).toEqual([]);
+            expect(exitCode).toBe(0);
+        });
+
+        test('keyword mode regression guard: keyword mode still ignores bare refs', async () => {
+            const { issues } = await extract('see #12\nCloses #5\n');
+            expect(issues).toEqual(['5']);
         });
     });
 
