@@ -241,5 +241,23 @@ describe('resolveRefreshWiring', () => {
                 warnSpy.mockRestore();
             }
         });
+
+        test('names a key whose explicit null arrives via the envConfig merge path (#150)', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+            // A JSON env config can carry `"cookies": null`; deepMerge's scalar
+            // branch assigns it, so it must survive the merge and be named.
+            const refreshOnlySessionAuth = { refreshOn: [401] } as unknown as SessionAuthConfig;
+            const envConfigWithNull = { sessionAuth: { cookies: null } } as unknown as
+                Parameters<typeof resolveRefreshWiring>[1];
+
+            try {
+                resolveRefreshWiring({ sessionAuth: refreshOnlySessionAuth }, envConfigWithNull);
+                expect(warnSpy).toHaveBeenCalledTimes(1);
+                const message = warnSpy.mock.calls[0]![0] as string;
+                expect(message).toContain('cookies');
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
     });
 });
