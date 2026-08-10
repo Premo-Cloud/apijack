@@ -36,14 +36,14 @@ function validateProjectSettings(parsed: unknown): ProjectSettings {
             warnAndIgnore('customCommands', 'an object');
             delete settings.customCommands;
         } else {
-            const customCommands = settings.customCommands as Record<string, unknown>;
+            const customCommands = settings.customCommands;
 
             if ('defaults' in customCommands) {
                 if (!isPlainObject(customCommands.defaults)) {
                     warnAndIgnore('customCommands.defaults', 'an object');
                     delete customCommands.defaults;
                 } else {
-                    const defaults = customCommands.defaults as Record<string, unknown>;
+                    const defaults = customCommands.defaults;
 
                     if ('requiresAuth' in defaults && typeof defaults.requiresAuth !== 'boolean') {
                         warnAndIgnore('customCommands.defaults.requiresAuth', 'a boolean');
@@ -59,7 +59,7 @@ function validateProjectSettings(parsed: unknown): ProjectSettings {
             warnAndIgnore('auth', 'an object');
             delete settings.auth;
         } else {
-            const auth = settings.auth as Record<string, unknown>;
+            const auth = settings.auth;
 
             if ('refreshOn' in auth) {
                 const refreshOn = auth.refreshOn;
