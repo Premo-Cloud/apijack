@@ -308,17 +308,6 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             expect(issues).toEqual(['7']);
         });
 
-        test('a setext underline hides the indented code beneath it — and is silent', async () => {
-            // HIDES a reference. A heading underlined with a bare lone `-` needs
-            // previous-line state to tell from a list item, so it pushes a
-            // container, and the indented code under it opens as a fence instead
-            // of staying visible. Narrow (`--` and `---` both take other paths)
-            // but this is one of the two shapes nothing else flags.
-            const { issues, stderr } = await extract('Title\n-\n\n    ```\n    Closes #1\n    ```\n');
-            expect(issues).toEqual([]);
-            expect(stderr).toBe('');
-        });
-
         test('a fence closed after an early close hides the rest — but warns', async () => {
             // Pins the MECHANISM, not a divergence. Flush-left code under a
             // bullet dedents out of the item, so the fence ends early and its
@@ -329,6 +318,83 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             const { issues, stderr } = await extract('- Steps:\n  ```bash\nnpm install\n  ```\n\nCloses #7\n');
             expect(issues).toEqual([]);
             expect(stderr).toContain('unterminated code fence');
+        });
+
+        test('a line that opens no paragraph still suppresses the empty marker under it — silently', async () => {
+            // HIDES a reference, and this one is silent where the early-close
+            // reopen above at least warns. An ATX heading (like indented code, a
+            // thematic break, or an HTML block) opens no paragraph in CommonMark,
+            // but the state machine has no model of ATX headings, so it sets
+            // prev_text = 1 anyway and suppresses the empty marker below it. The
+            // fence indented into what CommonMark calls that list item keeps a
+            // lower fence_base and never ends at the dedent, so `Closes #7`
+            // is swallowed with no unterminated-fence warning. On this shape
+            // dev was CommonMark-correct on both counts — the flush-left line
+            // ends the item and its fence, so it printed #7 and warned about
+            // the genuinely unterminated fence the trailing line opens.
+            // Accepted anyway: the shape is contrived, and #157 tracks
+            // narrowing prev_text so the marker reads as a real item again.
+            const { issues, stderr, exitCode } = await extract('# Title\n-\n  ```\n  code\nCloses #7\n  ```\n');
+            expect(issues).toEqual([]);
+            expect(stderr).toBe('');
+            expect(exitCode).toBe(0);
+        });
+    });
+
+    describe('a setext underline is not a list item', () => {
+        // An empty list marker on the line right after open paragraph text
+        // never starts a list item (#142): for `-` it is a setext underline,
+        // for `*`/`+`/ordered markers it is a lazy paragraph continuation —
+        // "an empty list item cannot interrupt a paragraph". Either way no
+        // container is pushed, so indented code beneath it stays indented
+        // code rather than opening as a fence.
+        test('leaves the indented code beneath it visible', async () => {
+            const { issues, stderr, exitCode } = await extract('Title\n-\n\n    ```\n    Closes #1\n    ```\n');
+            expect(issues).toEqual(['1']);
+            expect(stderr).toBe('');
+            expect(exitCode).toBe(0);
+        });
+
+        test('trailing whitespace on the underline does not change that', async () => {
+            const { issues } = await extract('Title\n-   \n\n    ```\n    Closes #1\n    ```\n');
+            expect(issues).toEqual(['1']);
+        });
+
+        test('an underline at an item content column is a heading inside the item, not a new container', async () => {
+            // Without the fence this doesn't discriminate: indent 6 is within
+            // base + 3 whether base is 2 (no new container, correct) or 4 (dev's
+            // buggy push). The fence makes it load-bearing: at base 2 it sits 4
+            // past the item's content column — indented code, stays visible — but
+            // dev wrongly pushes a second container to base 4, where the same
+            // fence opens and swallows #100.
+            const { issues } = await extract('- Title\n  -\n\n      ```\n      Closes #100\n      ```\nCloses #7\n');
+            expect(issues).toEqual(['7', '100']);
+        });
+
+        test('a lone `-` that dedents back to sibling position is still a real empty item', async () => {
+            // The one exception: dedenting to a sibling marker position pops a
+            // container on the way in, which is how this case is told apart
+            // from the underline above.
+            const { issues } = await extract('- foo\n-\n    ```\n    Closes #100\n    ```\nCloses #7\n');
+            expect(issues).toEqual(['7']);
+        });
+
+        test('the underline closes the paragraph, so a second lone `-` is a genuine item', async () => {
+            const { issues } = await extract('Title\n-\n-\n    ```\n    Closes #100\n    ```\nCloses #7\n');
+            expect(issues).toEqual(['7']);
+        });
+
+        test('other empty markers cannot interrupt a paragraph either', async () => {
+            const star = await extract('Title\n*\n\n    ```\n    Closes #1\n    ```\n');
+            expect(star.issues).toEqual(['1']);
+
+            const ordered = await extract('Title\n1.\n\n    ```\n    Closes #1\n    ```\n');
+            expect(ordered.issues).toEqual(['1']);
+        });
+
+        test('after a closed fence a lone `-` is a genuine empty item', async () => {
+            const { issues } = await extract('```\ncode\n```\n-\n    ```\n    Closes #100\n    ```\nCloses #7\n');
+            expect(issues).toEqual(['7']);
         });
     });
 

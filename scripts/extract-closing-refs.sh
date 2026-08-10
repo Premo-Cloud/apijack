@@ -44,10 +44,18 @@
 # the state machine is there for exactly that reason. Weigh it before touching
 # the escape.
 #
+# An empty list marker right after open paragraph text pushes no container
+# (#142): for `-` that's a setext heading underline, for `*`/`+`/ordered
+# markers a lazy paragraph continuation ("an empty list item cannot interrupt
+# a paragraph"). The one exception is a marker that dedents back to a sibling
+# position — `- foo` then `-` at column 0 — which pops a container on its way
+# in and still pushes; that pop is how the state machine tells a real empty
+# item apart from the underline.
+#
 # Known and deliberate gaps. Most leave a reference VISIBLE (a possible false
 # positive) rather than hiding a real one, which is the safer direction to err —
-# the two that can hide one, the early-close reopen above and the setext
-# underline below, say so where they are described:
+# the two that can hide one, the early-close reopen above and the empty-marker
+# suppression below, say so where they are described:
 #   - indented code blocks and blockquotes are not stripped (per #129: a
 #     blockquote can legitimately carry a real reference)
 #   - code spans are scanned per line, so a span that wraps across a newline
@@ -62,9 +70,11 @@
 #     container early, which only lowers the column a fence must beat
 #   - a fence opener sharing a line with its list marker (`- ```) is not seen,
 #     because the opener is looked for at the line indent, not past the marker
-#   - a setext heading underline (`Title` over a bare `-`) reads as a list item
-#     and pushes a container, since detecting it needs previous-line state; the
-#     container it pushes can open indented code under it as a fence
+#   - a line that opens no paragraph but reads as one here (an ATX heading, a
+#     thematic break, an HTML block, an indented code line) suppresses the empty
+#     marker under it, so a fence indented into what CommonMark calls that list
+#     item keeps its lower fence_base and does not end at a dedent — the second
+#     rule that can hide a reference, and unlike the reopen above it is silent
 #
 # Network-free by design: it takes text, not a PR number. Callers do their own
 # fetching, which differs between them for good reasons (the label scripts hit
@@ -211,7 +221,7 @@ function list_offset(p,   w, n, c, t) {
 
 BEGIN {
     in_fence = 0; fence_char = ""; fence_len = 0; fence_indent = 0; fence_base = 0
-    depth = 0; base = 0
+    depth = 0; base = 0; prev_text = 0
 }
 {
     # Leading spaces, counted with a loop rather than /^ */ because the count is
@@ -242,6 +252,7 @@ BEGIN {
                     fence_indent = 0; fence_base = 0
                 }
             }
+            prev_text = 0
             next
         }
         # Dedented out of the list item holding the fence, so the fence ended
@@ -251,11 +262,13 @@ BEGIN {
         fence_indent = 0; fence_base = 0
     }
 
+    no_para = 0
     if (!blank) {
         # A list item may contain blank lines, so only a non-blank line closes
         # containers. Popping eagerly lowers base, which makes a deep fence
         # LESS likely to be recognized — the false-positive direction.
-        while (depth > 0 && indent < stack[depth]) depth--
+        popped = 0
+        while (depth > 0 && indent < stack[depth]) { depth--; popped = 1 }
         base = 0
         if (depth > 0) base = stack[depth]
 
@@ -267,9 +280,25 @@ BEGIN {
         if (indent <= base + 3) {
             off = list_offset(probe)
             if (off > 0) {
-                depth++
-                stack[depth] = indent + off
-                base = stack[depth]
+                # An empty marker right after open paragraph text never starts
+                # a list item (#142): for `-` it is a setext underline, for the
+                # rest a lazy continuation ("an empty list item cannot
+                # interrupt a paragraph"). The one exception is a marker that
+                # dedented to pop a container on its way in — that is a real
+                # sibling empty item (`- foo` then `-` at column 0), told
+                # apart here by `popped`. The digit run below is unbounded,
+                # unlike the 9-digit cap in list_offset — safe only because
+                # off > 0 already excludes a 10+-digit marker; keep the two
+                # coupled.
+                empty_marker = (probe ~ /^([-*+]|[0-9]+[.)])[[:space:]]*$/)
+                if (empty_marker && prev_text && !popped) {
+                    no_para = 1
+                } else {
+                    depth++
+                    stack[depth] = indent + off
+                    base = stack[depth]
+                    if (empty_marker) no_para = 1
+                }
             } else if (match(probe, /^(```+|~~~+)/)) {
                 ch = substr(probe, 1, 1)
                 # A backtick info string cannot itself contain a backtick, so
@@ -277,12 +306,14 @@ BEGIN {
                 if (ch != "`" || index(substr(probe, RLENGTH + 1), "`") == 0) {
                     in_fence = 1; fence_char = ch; fence_len = RLENGTH
                     fence_indent = indent; fence_base = base
+                    prev_text = 0
                     next
                 }
             }
         }
     }
     print strip_spans($0)
+    prev_text = (!blank && !no_para)
 }
 
 # A closing fence cannot carry a trailing info string, so one stray character on
