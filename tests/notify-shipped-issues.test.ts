@@ -105,6 +105,14 @@ function buildRepo(dir: string): void {
     git(dir, ['config', 'user.name', 'Test']);
 }
 
+/** Commit with a multi-line message, needed for fenced-block/inline-span fixtures. */
+function commitWithMessage(dir: string, message: string): void {
+    const msgFile = join(dir, '.commit-msg-tmp');
+    writeFileSync(msgFile, message);
+    git(dir, ['commit', '--allow-empty', '-F', msgFile]);
+    rmSync(msgFile);
+}
+
 /** Run notify-shipped-issues.sh with a fake `gh` backed by `fixture`. */
 async function runScript(opts: { cwd: string; args: string[]; fixture: Fixture; repo?: string }): Promise<RunResult> {
     const fakeBin = mkdtempSync(join(tmpdir(), 'notify-shipped-fakebin-'));
@@ -148,6 +156,7 @@ describe.skipIf(process.platform === 'win32')('notify-shipped-issues.sh', () => 
     let singleTagRepo: string;
     let noRefRepo: string;
     let crossTagRepo: string;
+    let quotedRepo: string;
 
     // mainRepo carries commits between v1.0.0 and v1.1.0 referencing five
     // issue numbers, one per scenario the fixture drives:
@@ -192,10 +201,41 @@ describe.skipIf(process.platform === 'win32')('notify-shipped-issues.sh', () => 
         git(crossTagRepo, ['tag', 'v1.1.0']);
         git(crossTagRepo, ['commit', '--allow-empty', '-m', 'fix: closed issue Fixes #20']);
         git(crossTagRepo, ['tag', 'v1.11.0']);
+
+        // quotedRepo pins the extractor wiring: a fenced code block and an
+        // inline code span each quote a `#N` that must NOT be scanned as a
+        // reference, alongside genuine references (including out-of-order
+        // ones) that must be — and in numeric order.
+        quotedRepo = mkdtempSync(join(tmpdir(), 'notify-shipped-quoted-'));
+        buildRepo(quotedRepo);
+        git(quotedRepo, ['commit', '--allow-empty', '-m', 'chore: initial commit']);
+        git(quotedRepo, ['tag', 'v1.0.0']);
+        git(quotedRepo, ['commit', '--allow-empty', '-m', 'fix: closed issue Fixes #100']);
+        git(quotedRepo, ['commit', '--allow-empty', '-m', 'fix: closed issue Fixes #11']);
+        git(quotedRepo, ['commit', '--allow-empty', '-m', 'fix: closed issue Fixes #9']);
+        // Fence opener as the first line of the body — only reachable via
+        // `--pretty=format:"%s%n%b"`; the old "%s %b" glued it onto the
+        // subject line, where the stripper's line-start fence check missed
+        // it.
+        commitWithMessage(quotedRepo, [
+            'fix: fenced reference test',
+            '',
+            '```',
+            'Example #77 quoted',
+            '```',
+            '',
+            'Fixes #5',
+        ].join('\n'));
+        commitWithMessage(quotedRepo, [
+            'fix: inline span reference test',
+            '',
+            'See `prefixes #14` for details',
+        ].join('\n'));
+        git(quotedRepo, ['tag', 'v1.1.0']);
     });
 
     afterAll(() => {
-        for (const dir of [mainRepo, singleTagRepo, noRefRepo, crossTagRepo]) {
+        for (const dir of [mainRepo, singleTagRepo, noRefRepo, crossTagRepo, quotedRepo]) {
             rmSync(dir, { recursive: true, force: true });
         }
     });
@@ -213,6 +253,15 @@ describe.skipIf(process.platform === 'win32')('notify-shipped-issues.sh', () => 
             14: { pull_request: null, state: 'closed', comments: [] },
         },
         commentFailures: ['14'],
+    };
+
+    const quotedFixture: Fixture = {
+        issues: {
+            5: { pull_request: null, state: 'closed', comments: [] },
+            9: { pull_request: null, state: 'closed', comments: [] },
+            11: { pull_request: null, state: 'closed', comments: [] },
+            100: { pull_request: null, state: 'closed', comments: [] },
+        },
     };
 
     test('no previous stable tag: exits 0, no comments', async () => {
@@ -326,6 +375,41 @@ describe.skipIf(process.platform === 'win32')('notify-shipped-issues.sh', () => 
         expect(result.calls).toContain(`comment 20 Shipped in [v1.11.0](${releaseUrl}) 🚀`);
     });
 
+    test('a reference quoted inside a fenced code block is not matched', async () => {
+        const result = await runScript({
+            cwd: quotedRepo,
+            args: ['v1.1.0', releaseUrl, '--dry-run'],
+            fixture: quotedFixture,
+        });
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).toContain('#5: [dry-run] would comment');
+        expect(result.stdout).not.toContain('#77');
+    });
+
+    test('a reference inside an inline code span is not matched', async () => {
+        const result = await runScript({
+            cwd: quotedRepo,
+            args: ['v1.1.0', releaseUrl, '--dry-run'],
+            fixture: quotedFixture,
+        });
+        expect(result.exitCode).toBe(0);
+        expect(result.stdout).not.toContain('#14');
+    });
+
+    test('scan order is numeric, not lexicographic', async () => {
+        const result = await runScript({
+            cwd: quotedRepo,
+            args: ['v1.1.0', releaseUrl, '--dry-run'],
+            fixture: quotedFixture,
+        });
+        expect(result.exitCode).toBe(0);
+        const indexOf = (n: string) => result.stdout.indexOf(`#${n}: [dry-run] would comment`);
+        const [i9, i11, i100] = [indexOf('9'), indexOf('11'), indexOf('100')];
+        expect(i9).toBeGreaterThanOrEqual(0);
+        expect(i11).toBeGreaterThan(i9);
+        expect(i100).toBeGreaterThan(i11);
+    });
+
     test('a broken revision range fails loudly instead of reading as "no issue references"', async () => {
         // v9.9.9 is not an actual tag in mainRepo: PREV_TAG resolves to
         // v1.1.0 (the highest real tag), then `git log v1.1.0..v9.9.9` fails
@@ -382,6 +466,17 @@ describe.skipIf(process.platform === 'win32')('notify-shipped-issues.sh', () => 
             expect(result.exitCode).toBe(1);
             expect(result.stderr).toContain('usage:');
             expect(result.calls.filter(c => c.startsWith('comment '))).toEqual([]);
+        });
+
+        test('errors on a third positional argument instead of silently ignoring it', async () => {
+            const result = await runScript({
+                cwd: mainRepo,
+                args: ['v1.0.0', releaseUrl, 'junk'],
+                fixture: { issues: {} },
+            });
+            expect(result.exitCode).toBe(1);
+            expect(result.stderr).toContain('usage:');
+            expect(result.calls).toEqual([]);
         });
     });
 });

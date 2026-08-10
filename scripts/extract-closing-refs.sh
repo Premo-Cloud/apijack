@@ -81,10 +81,17 @@
 # `gh api repos/.../pulls/N`; collect-closes-refs.sh uses `gh pr view` so it can
 # skip numbers that turn out to be issues rather than PRs).
 #
+# --bare-refs switches the match stage from keyword-prefixed closing
+# references to ANY `#N`, while leaving the code-stripping pre-pass above
+# untouched. Used by scripts/notify-shipped-issues.sh, whose header explains
+# why that breadth — any `#N`, no closing keyword required — is deliberate
+# there; but a `#N` quoted inside code is no more a real reference in bare
+# mode than in keyword mode, so it still goes through the same strip.
+#
 # Usage:
-#   extract-closing-refs.sh --body-file <file>
-#   extract-closing-refs.sh -            # read stdin
-#   cat body.md | extract-closing-refs.sh
+#   extract-closing-refs.sh [--bare-refs] --body-file <file>
+#   extract-closing-refs.sh [--bare-refs] -            # read stdin
+#   cat body.md | extract-closing-refs.sh [--bare-refs]
 #
 # Output: issue numbers, one per line. Empty output and exit 0 when a body has
 # no closing references — that is a normal case (a chore PR opened outside the
@@ -99,6 +106,12 @@
 
 set -euo pipefail
 
+bare_refs=0
+if [ "${1-}" = "--bare-refs" ]; then
+    bare_refs=1
+    shift
+fi
+
 body_file=""
 case "${1-}" in
     --body-file)
@@ -108,7 +121,7 @@ case "${1-}" in
         body_file="/dev/stdin"
         ;;
     *)
-        echo "usage: extract-closing-refs.sh [--body-file <file> | -]" >&2
+        echo "usage: extract-closing-refs.sh [--bare-refs] [--body-file <file> | -]" >&2
         exit 1
         ;;
 esac
@@ -328,8 +341,16 @@ END {
 # rather than be swallowed by the no-match tolerance below.
 stripped=$(awk "$AWK_STRIP" "$body_file")
 
-printf '%s\n' "$stripped" \
-    | grep -oiE "$KEYWORD_RE" \
-    | grep -oE '[0-9]+' \
-    | sort -un \
-    || [ $? -eq 1 ]   # grep exit 1 == no closing references. Any other status propagates.
+if [ "$bare_refs" -eq 1 ]; then
+    printf '%s\n' "$stripped" \
+        | grep -oE '#[0-9]+' \
+        | grep -oE '[0-9]+' \
+        | sort -un \
+        || [ $? -eq 1 ]   # grep exit 1 == no bare references. Any other status propagates.
+else
+    printf '%s\n' "$stripped" \
+        | grep -oiE "$KEYWORD_RE" \
+        | grep -oE '[0-9]+' \
+        | sort -un \
+        || [ $? -eq 1 ]   # grep exit 1 == no closing references. Any other status propagates.
+fi
