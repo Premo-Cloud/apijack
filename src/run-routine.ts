@@ -159,6 +159,11 @@ export async function runRoutine(
         auth: authStrategy,
         sessionAuth,
         onChallengeInjectedFrom,
+        // Mirror bin/apijack.ts: `.apijack/settings.json` auth.refreshOn must reach
+        // createCli here too. Routine fixtures (Playwright/Vitest) are exactly the
+        // long-running flows a stale session bites, so the programmatic entry point
+        // needs the same stale-session refresh the CLI gets.
+        refreshOn: projectSettings.auth?.refreshOn,
         generatedDir,
         allowedCidrs: projectConfig?.allowedCidrs,
         configPath: join(configDir, 'config.json'),
