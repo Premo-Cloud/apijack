@@ -860,6 +860,68 @@ describe('alias validation before codegen has run (#136)', () => {
 
         expect(stderrOut).not.toContain('does not resolve to a known command');
     });
+
+    test('does not report unresolved generated-command aliases when codegen is partial (client exports no ApiClient) (#138)', async () => {
+        const workDir = join(tmpdir(), `apijack-alias-partialcodegen-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        const cliConfigDir = join(workDir, '.testcli');
+        const generatedDir = join(workDir, 'src', 'generated');
+        mkdirSync(cliConfigDir, { recursive: true });
+        mkdirSync(generatedDir, { recursive: true });
+        // Points at an operation that would only exist once `generate` has fully run.
+        writeFileSync(
+            join(cliConfigDir, 'aliases.json'),
+            JSON.stringify({ cs: 'customers list-customers' }),
+        );
+        // commandsModule exists (so `commandsModule` is truthy)...
+        writeFileSync(
+            join(generatedDir, 'commands.ts'),
+            'export function registerGeneratedCommands(): void {}\n',
+        );
+        // ...but the client module imports cleanly without exporting `ApiClient`,
+        // leaving `ApiClientClass` undefined and registration skipped.
+        writeFileSync(join(generatedDir, 'client.ts'), 'export const somethingElse = 1;\n');
+
+        const origArgv = process.argv;
+        const origStderr = process.stderr.write.bind(process.stderr);
+        const origStdout = process.stdout.write.bind(process.stdout);
+        const origLog = console.log;
+        const origExit = process.exit;
+        let stderrOut = '';
+
+        try {
+            process.argv = ['node', 'testcli', 'config', 'list'];
+            process.stderr.write = ((c: string | Uint8Array) => {
+                stderrOut += String(c);
+
+                return true;
+            }) as never;
+            process.stdout.write = (() => true) as never;
+            console.log = () => {};
+            process.exit = (() => {
+                throw new Error('__exit__');
+            }) as never;
+
+            const cli = createCli(makeOptions({
+                configPath: join(cliConfigDir, 'config.json'),
+                generatedDir,
+            }));
+
+            try {
+                await cli.run();
+            } catch (e) {
+                if ((e as Error).message !== '__exit__') throw e;
+            }
+        } finally {
+            process.argv = origArgv;
+            process.stderr.write = origStderr as never;
+            process.stdout.write = origStdout as never;
+            console.log = origLog;
+            process.exit = origExit;
+            rmSync(workDir, { recursive: true, force: true });
+        }
+
+        expect(stderrOut).not.toContain('does not resolve to a known command');
+    });
 });
 
 describe('cli.runRoutine', () => {

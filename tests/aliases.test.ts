@@ -260,7 +260,7 @@ describe('rewriteArgv()', () => {
         // Pre-codegen, "customers get-customer-order-summary" hasn't been registered
         // yet, so it's absent from realPaths — same situation as an unknown expansion.
         const aliases: AliasMap = { cs: 'customers get-customer-order-summary' };
-        const result = rewriteArgv(['cs', '42'], aliases, new Set(['generate', 'config']), {
+        const result = rewriteArgv(['cs', '42'], aliases, builtinPaths, {
             generatedCommandsPresent: false,
         });
 
