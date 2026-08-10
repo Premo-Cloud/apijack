@@ -44,10 +44,18 @@
 # the state machine is there for exactly that reason. Weigh it before touching
 # the escape.
 #
+# An empty list marker right after open paragraph text pushes no container
+# (#142): for `-` that's a setext heading underline, for `*`/`+`/ordered
+# markers a lazy paragraph continuation ("an empty list item cannot interrupt
+# a paragraph"). The one exception is a marker that dedents back to a sibling
+# position — `- foo` then `-` at column 0 — which pops a container on its way
+# in and still pushes; that pop is how the state machine tells a real empty
+# item apart from the underline.
+#
 # Known and deliberate gaps. Most leave a reference VISIBLE (a possible false
 # positive) rather than hiding a real one, which is the safer direction to err —
-# the one that can hide one, the early-close reopen above, says so where it is
-# described:
+# the two that can hide one, the early-close reopen above and the empty-marker
+# suppression below, say so where they are described:
 #   - indented code blocks and blockquotes are not stripped (per #129: a
 #     blockquote can legitimately carry a real reference)
 #   - code spans are scanned per line, so a span that wraps across a newline
@@ -62,6 +70,11 @@
 #     container early, which only lowers the column a fence must beat
 #   - a fence opener sharing a line with its list marker (`- ```) is not seen,
 #     because the opener is looked for at the line indent, not past the marker
+#   - a line that opens no paragraph but reads as one here (an ATX heading, a
+#     thematic break, an HTML block, an indented code line) suppresses the empty
+#     marker under it, so a fence indented into what CommonMark calls that list
+#     item keeps its lower fence_base and does not end at a dedent — the second
+#     rule that can hide a reference, and unlike the reopen above it is silent
 #
 # Network-free by design: it takes text, not a PR number. Callers do their own
 # fetching, which differs between them for good reasons (the label scripts hit
@@ -273,7 +286,10 @@ BEGIN {
                 # interrupt a paragraph"). The one exception is a marker that
                 # dedented to pop a container on its way in — that is a real
                 # sibling empty item (`- foo` then `-` at column 0), told
-                # apart here by `popped`.
+                # apart here by `popped`. The digit run below is unbounded,
+                # unlike the 9-digit cap in list_offset — safe only because
+                # off > 0 already excludes a 10+-digit marker; keep the two
+                # coupled.
                 empty_marker = (probe ~ /^([-*+]|[0-9]+[.)])[[:space:]]*$/)
                 if (empty_marker && prev_text && !popped) {
                     no_para = 1

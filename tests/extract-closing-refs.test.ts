@@ -279,7 +279,7 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
 
     describe('documented gaps', () => {
         // Most of these leak a reference rather than hide one — the safer
-        // direction. The one that can hide one is pinned last, and says so. All
+        // direction. The two that can hide one are pinned last, and say so. All
         // of them are here so the behavior can't drift silently; see the header
         // comment in scripts/extract-closing-refs.sh.
 
@@ -319,6 +319,23 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
             expect(issues).toEqual([]);
             expect(stderr).toContain('unterminated code fence');
         });
+
+        test('a line that opens no paragraph still suppresses the empty marker under it — silently', async () => {
+            // HIDES a reference, and this one is silent where the early-close
+            // reopen above at least warns. An ATX heading (like indented code, a
+            // thematic break, or an HTML block) opens no paragraph in CommonMark,
+            // but the state machine has no model of ATX headings, so it sets
+            // prev_text = 1 anyway and suppresses the empty marker below it. The
+            // fence indented into what CommonMark calls that list item keeps a
+            // lower fence_base and never ends at the dedent, so `Closes #7`
+            // is swallowed with no unterminated-fence warning. dev has the
+            // symmetric defect here: it reports #7 AND fires a spurious
+            // unterminated-fence warning, since CommonMark agrees the ref is code.
+            const { issues, stderr, exitCode } = await extract('# Title\n-\n  ```\n  code\nCloses #7\n  ```\n');
+            expect(issues).toEqual([]);
+            expect(stderr).toBe('');
+            expect(exitCode).toBe(0);
+        });
     });
 
     describe('a setext underline is not a list item', () => {
@@ -341,8 +358,14 @@ describe.skipIf(process.platform === 'win32')('extract-closing-refs.sh', () => {
         });
 
         test('an underline at an item content column is a heading inside the item, not a new container', async () => {
-            const { issues } = await extract('- Title\n  -\n\n      Closes #100\n');
-            expect(issues).toEqual(['100']);
+            // Without the fence this doesn't discriminate: indent 6 is within
+            // base + 3 whether base is 2 (no new container, correct) or 4 (dev's
+            // buggy push). The fence makes it load-bearing: at base 2 it sits 4
+            // past the item's content column — indented code, stays visible — but
+            // dev wrongly pushes a second container to base 4, where the same
+            // fence opens and swallows #100.
+            const { issues } = await extract('- Title\n  -\n\n      ```\n      Closes #100\n      ```\nCloses #7\n');
+            expect(issues).toEqual(['7', '100']);
         });
 
         test('a lone `-` that dedents back to sibling position is still a real empty item', async () => {
