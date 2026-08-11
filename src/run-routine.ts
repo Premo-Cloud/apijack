@@ -134,12 +134,14 @@ export async function runRoutine(
     }
 
     let sessionAuth: SessionAuthConfig | undefined;
+    let onChallengeInjectedFrom: string | undefined;
 
     if (envConfig) {
         sessionAuth = (envConfig as Record<string, unknown>).sessionAuth as SessionAuthConfig | undefined;
 
         if (sessionAuth && projectOnChallenge) {
             sessionAuth.onChallenge = projectOnChallenge;
+            onChallengeInjectedFrom = '.apijack/auth.ts';
         }
     }
 
@@ -156,6 +158,12 @@ export async function runRoutine(
         specPath,
         auth: authStrategy,
         sessionAuth,
+        onChallengeInjectedFrom,
+        // Mirror bin/apijack.ts: `.apijack/settings.json` auth.refreshOn must reach
+        // createCli here too. Routine fixtures (Playwright/Vitest) are exactly the
+        // long-running flows a stale session bites, so the programmatic entry point
+        // needs the same stale-session refresh the CLI gets.
+        refreshOn: projectSettings.auth?.refreshOn,
         generatedDir,
         allowedCidrs: projectConfig?.allowedCidrs,
         configPath: join(configDir, 'config.json'),

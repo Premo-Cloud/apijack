@@ -163,5 +163,101 @@ describe('resolveRefreshWiring', () => {
                 warnSpy.mockRestore();
             }
         });
+
+        test('attributes onChallenge to its injection source when onChallengeInjectedFrom is set (#150)', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+            const refreshOnlyWithChallenge = {
+                refreshOn: [401],
+                onChallenge: async () => {},
+            } as unknown as SessionAuthConfig;
+
+            try {
+                resolveRefreshWiring(
+                    { sessionAuth: refreshOnlyWithChallenge, onChallengeInjectedFrom: '.apijack/auth.ts' },
+                    undefined,
+                );
+                expect(warnSpy).toHaveBeenCalledTimes(1);
+                const message = warnSpy.mock.calls[0]![0] as string;
+                expect(message).toContain('onChallenge (injected from .apijack/auth.ts)');
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
+
+        test('renders onChallenge plain when onChallengeInjectedFrom is not set (#150)', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+            const refreshOnlyWithChallenge = {
+                refreshOn: [401],
+                onChallenge: async () => {},
+            } as unknown as SessionAuthConfig;
+
+            try {
+                resolveRefreshWiring({ sessionAuth: refreshOnlyWithChallenge }, undefined);
+                expect(warnSpy).toHaveBeenCalledTimes(1);
+                const message = warnSpy.mock.calls[0]![0] as string;
+                expect(message).toContain('onChallenge');
+                expect(message).not.toContain('injected from');
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
+
+        test('attributes only the injected onChallenge key when mixed with a typo\'d key (#150)', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+            const mixedSessionAuth = {
+                refreshOn: [401],
+                onChallenge: async () => {},
+                sessions: { endpoint: '/session' },
+            } as unknown as SessionAuthConfig;
+
+            try {
+                resolveRefreshWiring(
+                    { sessionAuth: mixedSessionAuth, onChallengeInjectedFrom: '.apijack/auth.ts' },
+                    undefined,
+                );
+                expect(warnSpy).toHaveBeenCalledTimes(1);
+                const message = warnSpy.mock.calls[0]![0] as string;
+                expect(message).toContain('onChallenge (injected from .apijack/auth.ts)');
+                expect(message).toContain('sessions');
+                expect(message).not.toContain('sessions (injected from');
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
+
+        test('names a key whose value is explicit null (#150)', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+            const explicitNullSessionAuth = {
+                refreshOn: [401],
+                cookies: null,
+            } as unknown as SessionAuthConfig;
+
+            try {
+                resolveRefreshWiring({ sessionAuth: explicitNullSessionAuth }, undefined);
+                expect(warnSpy).toHaveBeenCalledTimes(1);
+                const message = warnSpy.mock.calls[0]![0] as string;
+                expect(message).toContain('cookies');
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
+
+        test('names a key whose explicit null arrives via the envConfig merge path (#150)', () => {
+            const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+            // A JSON env config can carry `"cookies": null`; deepMerge's scalar
+            // branch assigns it, so it must survive the merge and be named.
+            const refreshOnlySessionAuth = { refreshOn: [401] } as unknown as SessionAuthConfig;
+            const envConfigWithNull = { sessionAuth: { cookies: null } } as unknown as
+                Parameters<typeof resolveRefreshWiring>[1];
+
+            try {
+                resolveRefreshWiring({ sessionAuth: refreshOnlySessionAuth }, envConfigWithNull);
+                expect(warnSpy).toHaveBeenCalledTimes(1);
+                const message = warnSpy.mock.calls[0]![0] as string;
+                expect(message).toContain('cookies');
+            } finally {
+                warnSpy.mockRestore();
+            }
+        });
     });
 });

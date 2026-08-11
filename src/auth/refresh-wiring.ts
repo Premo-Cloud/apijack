@@ -5,6 +5,10 @@ import { deepMergeSessionAuth } from './config-merge';
 export interface RefreshWiringOptions {
     sessionAuth?: SessionAuthConfig;
     refreshOn?: number[];
+    /** Set by the shared-binary entry points when they inject a project-level
+     *  `onChallenge` (from `.apijack/auth.ts`) into `sessionAuth`. Used only to
+     *  attribute the injected key in the endpoint-less sessionAuth diagnostic. */
+    onChallengeInjectedFrom?: string;
 }
 
 export interface RefreshWiring {
@@ -44,13 +48,22 @@ export function resolveRefreshWiring(
         // this works without a session.endpoint. Only warn when there's something else
         // in the block, which is the signature of a typo'd handshake key (e.g. `sessions:`
         // instead of `session:`) rather than an intentional refresh-only block.
+        // An explicit `null` (e.g. from a JSON env config) still counts as "present" here
+        // deliberately — the user typed it, and the key is genuinely dead without a
+        // session.endpoint, so it's correct to name it in the warning (#150).
         const foundKeys = Object.keys(rawSessionAuth).filter(
             key => key !== 'refreshOn' && (rawSessionAuth as Record<string, unknown>)[key] !== undefined,
         );
 
         if (foundKeys.length > 0) {
+            const renderedKeys = foundKeys.map(key =>
+                key === 'onChallenge' && options.onChallengeInjectedFrom
+                    ? `onChallenge (injected from ${options.onChallengeInjectedFrom})`
+                    : key,
+            );
+
             console.warn(
-                `[apijack] sessionAuth is set but missing session.endpoint — SessionAuthStrategy will not be used. Found: ${foundKeys.join(', ')}.`,
+                `[apijack] sessionAuth is set but missing session.endpoint — SessionAuthStrategy will not be used. Found: ${renderedKeys.join(', ')}.`,
             );
         }
     }
