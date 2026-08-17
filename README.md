@@ -41,7 +41,7 @@ bun install -g @apijack/core
 ```
 
 ```bash
-apijack setup              # Configure URL + credentials (auth auto-detected)
+apijack setup              # Configure URL + credentials (Basic auth by default)
 apijack generate            # Pull OpenAPI spec, generate types/client/commands
 apijack --help              # See all generated commands
 ```

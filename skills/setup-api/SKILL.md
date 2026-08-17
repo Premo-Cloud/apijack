@@ -10,7 +10,7 @@ Connect apijack to any API with an OpenAPI spec to generate a full CLI.
 ## Quick Setup
 
 ```bash
-apijack setup              # Interactive: URL, credentials, auth detection
+apijack setup              # Interactive: URL + credentials (Basic auth by default)
 apijack generate           # Pull spec, generate types/client/commands
 apijack --help             # See generated commands
 ```
@@ -20,8 +20,9 @@ apijack --help             # See generated commands
 `apijack setup` prompts for:
 - **Environment name** (e.g. "dev", "staging")
 - **API base URL** (e.g. "http://localhost:8080")
-- **Credentials** (username + password, bearer token, or API key)
-- **Auth type** is auto-detected from the OpenAPI security schemes
+- **Credentials** (username + password)
+
+Auth is Basic by default and is **not** read from the OpenAPI spec's `securitySchemes`. To use another strategy, add a `.apijack/auth.ts` exporting an `AuthStrategy`, or set `authType` (`bearer` or `apiKey`, plus `authHeader` / `apiKey` for the latter) on the environment entry in `config.json`.
 
 Credentials are stored in `~/.apijack/config.json` for dev URLs. Production URLs require environment variables:
 
