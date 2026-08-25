@@ -84,6 +84,33 @@ promote_issues() {
         || warn "Could not promote issue labels — release has landed; label by hand."
 }
 
+# Sync local branches after a release, and push dev back to origin.
+#
+# The push is the part that used to be missing (#167). Without it, origin/dev
+# stays at the pre-release commit while local dev sits at main's tip: the next
+# `git pull origin dev` refuses with "Need to specify how to reconcile
+# divergent branches", and anything that branches from origin/dev — a fresh
+# clone, a worktree, the parallel issue fleet — silently starts from before
+# the release.
+#
+# Never force. A rejected push means someone landed work on dev during the
+# release window, and that work must not be discarded. Warn with the manual
+# reconcile and carry on: the release has already published by the time this
+# runs, so a sync hiccup must not fail the ship.
+sync_branches() {
+    info "Syncing branches..."
+    git checkout main --quiet && git pull --quiet
+    git checkout dev --quiet && git rebase main --quiet
+
+    if git push origin dev --quiet 2>/dev/null; then
+        ok "dev synced to origin"
+    else
+        warn "Could not fast-forward origin/dev — someone may have pushed to dev during the release."
+        warn "The release itself is fine. Reconcile by hand:"
+        warn "  git checkout dev && git pull --rebase origin dev && git push origin dev"
+    fi
+}
+
 # Resolve a merged PR's merge commit into $MERGE_SHA.
 #
 # `gh pr merge` returns once the REST merge completes, but `gh pr view` reads
@@ -209,9 +236,7 @@ resume_untagged_release() {
     tag_and_publish "$MERGE_SHA" "$main_version"
     promote_issues
 
-    info "Syncing branches..."
-    git checkout main --quiet && git pull --quiet
-    git checkout dev --quiet && git rebase main --quiet
+    sync_branches
     ok "Resumed and shipped v$main_version"
     exit 0
 }
@@ -450,8 +475,6 @@ promote_issues
 
 # ── Step 9: Cleanup ────────────────────────────────────────────────
 
-info "Syncing branches..."
-git checkout main --quiet && git pull --quiet
-git checkout dev --quiet && git rebase main --quiet
+sync_branches
 
 ok "Shipped v$NEW_VERSION"

@@ -15,9 +15,16 @@ let commandsOutput: string;
 let commandMapOutput: string;
 
 beforeAll(async () => {
-    // Download Stripe spec — skip suite if offline
+    // Download Stripe spec — skip suite if unavailable (offline, rate-limited,
+    // or just slow). Two deadlines matter here and they must not be equal:
+    // the fetch is bounded well inside the hook's own timeout, so a slow or
+    // hanging response lands in the catch below instead of blowing the hook's
+    // deadline. A timed-out hook is reported as a hard test failure, not a
+    // skip — which is how a GitHub 429 on raw.githubusercontent.com (7-15s to
+    // respond, against bun's 5s default) once blocked a release even though
+    // this suite is designed to opt out when the spec can't be fetched.
     try {
-        const res = await fetch(STRIPE_SPEC_URL);
+        const res = await fetch(STRIPE_SPEC_URL, { signal: AbortSignal.timeout(20_000) });
 
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
@@ -35,7 +42,9 @@ beforeAll(async () => {
     clientOutput = await Bun.file(join(outDir, 'client.ts')).text();
     commandsOutput = await Bun.file(join(outDir, 'commands.ts')).text();
     commandMapOutput = await Bun.file(join(outDir, 'command-map.ts')).text();
-});
+    // Explicit hook timeout: the default 5s is shorter than a healthy download
+    // of this spec, let alone a throttled one.
+}, 60_000);
 
 function skipIfOffline() {
     if (!spec) {
